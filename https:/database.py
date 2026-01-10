@@ -7,29 +7,33 @@ def init_connection():
     key = st.secrets["SUPABASE_KEY"]
     return create_client(url, key)
 
-# --- ALTE FUNKTIONEN (für Michis Test) ---
-def insert_messwert(kategorie, wert, kommentar):
-    supabase = init_connection()
-    data = {"kategorie": kategorie, "wert": wert, "kommentar": kommentar}
-    return supabase.table("Michis Test").insert(data).execute() # Ggf. tabellenname anpassen
-
-def get_all_messwerte():
-    supabase = init_connection()
-    return supabase.table("Michis Test").select("*").execute().data
-
-# --- NEUE FUNKTIONEN (für Digital Projects) ---
+# --- PROJEKTE ---
 def insert_bulk_projects(data_list):
-    """Speichert viele Projekte auf einmal (für den Generator)"""
     supabase = init_connection()
-    # Supabase erlaubt Bulk-Inserts, wenn man eine Liste von Dictionaries übergibt
-    response = supabase.table("digital_projects").insert(data_list).execute()
-    return response
+    return supabase.table("digital_projects").insert(data_list).execute()
 
 def get_projects():
-    """Lädt die Projektdaten"""
     supabase = init_connection()
     return supabase.table("digital_projects").select("*").execute().data
 
 def delete_project(id):
     supabase = init_connection()
     return supabase.table("digital_projects").delete().eq("id", id).execute()
+
+def delete_all_projects(): # Vorsicht!
+    supabase = init_connection()
+    # Trick um alles zu löschen: ID größer als 0
+    return supabase.table("digital_projects").delete().neq("id", 0).execute()
+
+# --- NEU: COMPANY STATS ---
+def insert_bulk_stats(data_list):
+    supabase = init_connection()
+    return supabase.table("company_stats").insert(data_list).execute()
+
+def get_stats():
+    supabase = init_connection()
+    return supabase.table("company_stats").select("*").execute().data
+
+def delete_all_stats():
+    supabase = init_connection()
+    return supabase.table("company_stats").delete().neq("id", 0).execute()
