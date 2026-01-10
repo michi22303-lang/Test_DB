@@ -4,18 +4,26 @@ import plotly.express as px
 import pandas as pd
 import time
 
-# Importiere unsere Datenbank-Funktionen
-# (Stelle sicher, dass die Datei database.py im selben Ordner liegt)
+# --- IMPORTS AUS DEINER DATEI ---
+# Falls er hier meckert, liegt database.py nicht im selben Ordner
 from database import insert_messwert, get_all_messwerte
 
-# --- PAGE CONFIG ---
-st.set_page_config(page_title="Cloud Dashboard", layout="wide")
+# --- 1. CONFIG (MUSS GANZ OBEN STEHEN) ---
+st.set_page_config(
+    page_title="Cloud Dashboard",
+    page_icon="🚀",
+    layout="wide"
+)
 
-# --- HEADER ---
-st.title("☁️ Unser Live-Dashboard")
-st.markdown("Daten werden in **Supabase** gespeichert und live visualisiert.")
+# --- 2. CSS STYLING (OPTIONAL FÜR DEN LOOK) ---
+st.markdown("""
+    <style>
+        .block-container {padding-top: 1rem; padding-bottom: 0rem;}
+        h1 {color: #2e86c1;}
+    </style>
+""", unsafe_allow_html=True)
 
-# --- SIDEBAR & NAVIGATION ---
+# --- 3. SIDEBAR NAVIGATION ---
 with st.sidebar:
     selected = option_menu(
         menu_title="Menü",
@@ -24,74 +32,89 @@ with st.sidebar:
         default_index=0,
     )
 
-# --- SEITE 1: EINGABE ---
+# --- 4. SEITE: EINGABE ---
 if selected == "Eingabe":
-    st.subheader("Neuen Datensatz erfassen")
+    st.title("📝 Neuen Datensatz erfassen")
     
-    # Wir nutzen ein Formular, damit die Seite nicht bei jedem Tastendruck neu lädt
     with st.form("entry_form", clear_on_submit=True):
         col1, col2 = st.columns(2)
         
         with col1:
-            kategorie = st.selectbox("Kategorie", ["Umsatz", "Kosten", "Gewinn", "Marketing"])
+            # Achte darauf, dass diese Begriffe Sinn ergeben für deine Charts
+            kategorie = st.selectbox("Kategorie", ["Umsatz", "Kosten", "Gewinn", "Marketing", "Sonstiges"])
         with col2:
-            wert = st.number_input("Wert (€)", min_value=0, value=100, step=10)
+            wert = st.number_input("Wert (€)", min_value=0.0, value=100.0, step=10.0)
             
         kommentar = st.text_area("Kommentar (optional)")
         
-        submitted = st.form_submit_button("Speichern 💾")
+        submitted = st.form_submit_button("In Cloud speichern ☁️")
         
         if submitted:
-            # Hier rufen wir die Funktion aus database.py auf
             try:
+                # Aufruf der Funktion aus database.py
                 insert_messwert(kategorie, wert, kommentar)
-                st.success("Daten erfolgreich in die Cloud gesendet!")
-                time.sleep(1) # Kurze Pause für den Effekt
+                st.success("Erfolgreich gespeichert! Geh zum Tab 'Visualisierung' um es zu sehen.")
             except Exception as e:
                 st.error(f"Fehler beim Speichern: {e}")
 
-# --- SEITE 2: VISUALISIERUNG ---
+# --- 5. SEITE: VISUALISIERUNG ---
 elif selected == "Visualisierung":
-    st.subheader("Live-Analyse aus der Datenbank")
+    st.title("📊 Live-Analyse")
     
-    # Daten laden
-    raw_data = get_all_messwerte()
-    
+    # Daten aus Supabase holen
+    try:
+        raw_data = get_all_messwerte()
+    except Exception as e:
+        st.error(f"Verbindungsfehler zur Datenbank: {e}")
+        raw_data = []
+
     if not raw_data:
-        st.warning("Noch keine Daten in der Datenbank vorhanden.")
+        st.info("Die Datenbank ist noch leer. Geh zum Tab 'Eingabe' und speichere etwas!")
     else:
-        # Daten in ein Pandas DataFrame umwandeln
+        # DataFrame erstellen
         df = pd.DataFrame(raw_data)
-        
-        # Metriken anzeigen
-        total_sum = df['wert'].sum()
-        count = len(df)
-        
-        m1, m2, m3 = st.columns(3)
-        m1.metric("Gesamtwert", f"{total_sum} €")
-        m2.metric("Anzahl Einträge", count)
-        m3.metric("Neuester Eintrag", df['created_at'].iloc[-1][:10]) # Datum abschneiden
 
-        st.divider()
-
-        # Coole Visualisierung mit Plotly
-        c1, c2 = st.columns(2)
+        # --- WICHTIGER FIX: SPALTEN BEREINIGEN ---
+        # Wir machen alle Spaltennamen klein, damit 'Kategorie' zu 'kategorie' wird.
+        df.columns = df.columns.str.lower()
         
-        with c1:
-            st.markdown("### Verteilung nach Kategorie")
-            # Ein Donut-Chart sieht oft moderner aus als ein Pie-Chart
-            fig_pie = px.pie(df, names='kategorie', values='wert', hole=0.4, 
-                             color_discrete_sequence=px.colors.sequential.RdBu)
-            st.plotly_chart(fig_pie, use_container_width=True)
-            
-        with c2:
-            st.markdown("### Werte über Zeit")
-            # Wir sortieren nach Zeit, damit der Graph stimmt
-            df = df.sort_values(by="created_at")
-            fig_line = px.bar(df, x='created_at', y='wert', color='kategorie',
-                              title="Chronologischer Verlauf")
-            st.plotly_chart(fig_line, use_container_width=True)
-
-        # Datentabelle anzeigen (optional)
-        with st.expander("Rohdaten anzeigen"):
+        # --- DEBUG-HELFER (Kannst du später entfernen) ---
+        with st.expander("Technik-Check: Geladene Rohdaten ansehen"):
+            st.write("Gefundene Spaltennamen:", df.columns.tolist())
             st.dataframe(df)
+
+        # --- PRÜFUNG: Haben wir die nötigen Spalten? ---
+        if 'wert' not in df.columns or 'kategorie' not in df.columns:
+            st.error(f"Achtung: Die Spalten 'wert' oder 'kategorie' fehlen in den Daten. Gefunden wurde: {df.columns.tolist()}")
+        else:
+            # METRIKEN
+            total = df['wert'].sum()
+            anzahl = len(df)
+            
+            m1, m2, m3 = st.columns(3)
+            m1.metric("Gesamtsumme", f"{total:,.2f} €")
+            m2.metric("Anzahl Datensätze", anzahl)
+            if 'created_at' in df.columns:
+                # Letztes Datum formatieren (die ersten 10 Zeichen YYYY-MM-DD)
+                last_date = str(df['created_at'].iloc[-1])[:10]
+                m3.metric("Letztes Update", last_date)
+
+            st.markdown("---")
+
+            # CHARTS
+            c1, c2 = st.columns(2)
+            
+            with c1:
+                st.subheader("Verteilung")
+                fig_pie = px.pie(df, names='kategorie', values='wert', hole=0.4,
+                                 color_discrete_sequence=px.colors.sequential.RdBu)
+                st.plotly_chart(fig_pie, use_container_width=True)
+            
+            with c2:
+                st.subheader("Werte-Vergleich")
+                # Falls created_at existiert, nutzen wir es als X-Achse, sonst einfach den Index
+                x_axis = 'created_at' if 'created_at' in df.columns else df.index
+                
+                fig_bar = px.bar(df, x=x_axis, y='wert', color='kategorie',
+                                 title="Balkendiagramm")
+                st.plotly_chart(fig_bar, use_container_width=True)
