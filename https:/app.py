@@ -64,7 +64,7 @@ try:
     df_proj = pd.DataFrame(raw_projects) if raw_projects else pd.DataFrame()
     df_stats = pd.DataFrame(raw_stats) if raw_stats else pd.DataFrame()
     
-    # Alles in Kleinbuchstaben für stabilen Zugriff
+    # Alles in Kleinbuchstaben
     if not df_proj.empty: df_proj.columns = df_proj.columns.str.lower()
     if not df_stats.empty: df_stats.columns = df_stats.columns.str.lower()
     
@@ -82,11 +82,8 @@ if selected == "Management Dashboard":
         st.warning("Keine Daten gefunden. Bitte gehe zuerst zum Reiter 'Daten-Generator'!")
     else:
         current_year = 2025
-        # Filter auf aktuelles Jahr
         df_p_curr = df_proj[(df_proj['year'] == current_year) & (df_proj['scenario'] == 'Actual')]
         df_s_curr = df_stats[(df_stats['year'] == current_year) & (df_stats['scenario'] == 'Actual')]
-        
-        # Vorjahr
         df_p_prev = df_proj[(df_proj['year'] == current_year - 1) & (df_proj['scenario'] == 'Actual')]
         
         if not df_s_curr.empty:
@@ -102,7 +99,6 @@ if selected == "Management Dashboard":
             spend_per_fte = total_budget / fte if fte > 0 else 0
             it_revenue_ratio = (total_budget / revenue * 100) if revenue > 0 else 0
             
-            # KPI CARDS
             c1, c2, c3, c4 = st.columns(4)
             with c1: kpi_func("Gesamt IT-Budget", f"{total_budget/1000000:,.1f} M€", f"{(total_budget-prev_budget)/prev_budget*100:+.1f}% vs Vj.", "grey")
             with c2: kpi_func("Mitarbeiter (FTE)", f"{fte:,.0f}", "Köpfe", "grey")
@@ -114,7 +110,6 @@ if selected == "Management Dashboard":
             col_chart1, col_chart2 = st.columns([2, 1])
             with col_chart1:
                 st.subheader("Entwicklung: Budget vs. Mitarbeiter")
-                # Daten aggregieren
                 df_trend_p = df_proj[df_proj['scenario'] == 'Actual'].groupby('year')['cost_planned'].sum().reset_index()
                 df_trend_s = df_stats[df_stats['scenario'] == 'Actual'].groupby('year')['fte_count'].mean().reset_index()
                 df_merge = pd.merge(df_trend_p, df_trend_s, on='year')
@@ -134,14 +129,13 @@ if selected == "Management Dashboard":
                 st.subheader("Verteilung: Invest (CAPEX) vs. Betrieb (OPEX)")
                 fig_pie = px.pie(df_p_curr, values='cost_planned', names='budget_type', 
                                    color='budget_type', 
-                                   # Wir nutzen hier Englisch im Code (Keys), aber Mapping bleibt gleich
                                    color_discrete_map={'CAPEX':'#00b894', 'OPEX':'#0984e3'}, hole=0.6)
                 fig_pie.update_layout(showlegend=True, margin=dict(t=0, b=0, l=0, r=0))
                 fig_pie.add_annotation(text=f"{opex/total_budget*100:.0f}%<br>OPEX", showarrow=False, font_size=20)
                 st.plotly_chart(fig_pie, use_container_width=True)
 
 # ------------------------------------------------------------------
-# TAB 2: PLANUNG & SIMULATION 2026
+# TAB 2: PLANUNG & SIMULATION 2026 (UPDATED TREIBERANALYSE)
 # ------------------------------------------------------------------
 elif selected == "Planung & Simulation 2026":
     st.title("🔮 Szenario-Planer 2026")
@@ -185,13 +179,10 @@ elif selected == "Planung & Simulation 2026":
             cost = row['cost_planned']
             opex_type = row.get('opex_type', '')
             
-            # Logik: Lizenzen hängen an FTEs
-            if opex_type == "Lizenzen (SaaS)" or opex_type == "Licenses (SaaS)": # Support DE/EN
+            if opex_type == "Lizenzen (SaaS)" or opex_type == "Licenses (SaaS)":
                 return cost * (1 + sim_inflation) * (1 + sim_fte_growth)
-            # Personal / Consulting hängt an Inflation
             elif row['budget_type'] == 'OPEX':
                 return cost * (1 + sim_inflation)
-            # Hardware (CAPEX) hängt an Inflation
             else:
                 return cost * (1 + sim_inflation)
 
@@ -218,26 +209,47 @@ elif selected == "Planung & Simulation 2026":
         col_v1, col_v2 = st.columns([2, 1])
         
         with col_v1:
-            st.subheader("Wasserfall: Treiber-Analyse")
-            inflation_effect = base_budget * sim_inflation
-            growth_effect = (sim_budget - base_budget) - inflation_effect
+            st.subheader("Budget-Überleitung (Waterfall)")
+            
+            # --- VERBESSERTE TREIBER-ANALYSE (WATERFALL) ---
+            # Wir berechnen die Effekte präziser für die Grafik
+            
+            # 1. Preis-Effekt (Alles was durch Inflation steigt)
+            effect_price = base_budget * sim_inflation
+            
+            # 2. Mengen-Effekt (Der Rest des Deltas ist Wachstum/Interaktion)
+            # Delta = (Sim - Base). Wir ziehen den Preis-Effekt ab, der Rest ist Menge.
+            effect_volume = delta - effect_price
             
             fig_water = go.Figure(go.Waterfall(
-                name = "2026 Bridge", orientation = "v",
+                name = "2026", 
+                orientation = "v",
                 measure = ["relative", "relative", "relative", "total"],
-                x = ["2025 Basis", "Effekt Inflation", "Effekt Wachstum", "2026 Prognose"],
+                x = ["Budget 2025", "Preis-Effekte", "Mengen-Effekte (Wachstum)", "Budget 2026"],
                 textposition = "outside",
-                text = [f"{base_budget/1000000:.1f}M", f"+{inflation_effect/1000000:.1f}M", f"+{growth_effect/1000000:.1f}M", f"{sim_budget/1000000:.1f}M"],
-                y = [base_budget, inflation_effect, growth_effect, sim_budget],
+                text = [
+                    f"{base_budget/1000000:.1f} M€", 
+                    f"+{effect_price/1000000:.1f} M€", 
+                    f"+{effect_volume/1000000:.1f} M€", 
+                    f"{sim_budget/1000000:.1f} M€"
+                ],
+                y = [base_budget, effect_price, effect_volume, sim_budget],
                 connector = {"line":{"color":"rgb(63, 63, 63)"}},
+                # Farbliche Gestaltung: Grau für Basis/Total, Rot für Kostensteigerung, Grün für Senkung
+                decreasing = {"marker":{"color":"#00b894"}}, # Grün (Falls wir sparen)
+                increasing = {"marker":{"color":"#d63031"}}, # Rot (Kosten steigen)
+                totals = {"marker":{"color":"#636e72"}}      # Grau (Ergebnis)
             ))
-            fig_water.update_layout(title="Wie setzt sich das neue Budget zusammen?")
+            
+            fig_water.update_layout(
+                title="Kostentreiber Analyse",
+                waterfallgap = 0.3
+            )
             st.plotly_chart(fig_water, use_container_width=True)
 
         with col_v2:
             st.subheader("Top Kostentreiber 2026")
             top_costs = df_sim.sort_values(by='cost_planned', ascending=False).head(5)
-            # Spaltennamen für Anzeige umbenennen
             display_df = top_costs[['project_name', 'cost_planned']].rename(columns={'project_name': 'Projekt', 'cost_planned': 'Kosten (€)'})
             st.dataframe(display_df, hide_index=True)
 
@@ -331,14 +343,12 @@ elif selected == "Daten-Generator":
                 insert_bulk_stats(stats_data)
                 
                 projects_data = []
-                # Deutsche Kategorien
                 categories = ["Digitaler Arbeitsplatz", "Cloud Plattform", "Cyber Security", "ERP & Business Apps", "Data & KI"]
                 
                 for stat in stats_data:
                     year = stat['year']
                     fte = stat['fte_count']
                     
-                    # A) Variable Kosten (FTE abhängig)
                     projects_data.append({
                         "project_name": "Globale Software Lizenzen (M365)",
                         "category": "Digitaler Arbeitsplatz",
@@ -350,12 +360,10 @@ elif selected == "Daten-Generator":
                         "risk_factor": 1, "strategic_score": 10, "status": "Live", "scenario": "Actual"
                     })
                     
-                    # B) Zufallsprojekte
                     for i in range(8):
                         cat = random.choice(categories)
                         cost = random.randint(20000, 500000)
                         
-                        # Typen Zuweisung (Deutsch)
                         if "Cloud" in cat or "Lizenzen" in str(cat):
                             b_type, o_type = "OPEX", "Cloud Infra"
                         else:
