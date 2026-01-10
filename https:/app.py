@@ -10,28 +10,22 @@ import time
 # Imports aus database.py
 from database import insert_bulk_projects, get_projects, insert_bulk_stats, get_stats, delete_all_projects, delete_all_stats
 
-st.set_page_config(page_title="CIO Cockpit 3.0", layout="wide", page_icon="🏢")
+st.set_page_config(page_title="CIO Cockpit 4.0 - Enterprise Edition", layout="wide", page_icon="🚀")
 
 # --- HELPER: DEUTSCHE ZAHLENFORMATIERUNG ---
 def fmt_de(value, decimals=0, suffix="€"):
-    """Wandelt 1234.56 in 1.234,56 um"""
     if value is None: return ""
     try:
-        # Erst englisch formatieren: 1,234.56
         s = f"{value:,.{decimals}f}"
-        # Dann Zeichen tauschen
         s = s.replace(",", "X").replace(".", ",").replace("X", ".")
         return f"{s} {suffix}".strip()
-    except:
-        return str(value)
+    except: return str(value)
 
 # --- DESIGN & STYLE ---
 def local_css():
     st.markdown("""
     <style>
         .block-container {padding-top: 1rem;}
-        
-        /* Karten Design */
         div.css-card {
             background-color: var(--secondary-background-color);
             border: 1px solid rgba(128, 128, 128, 0.2);
@@ -65,8 +59,8 @@ with st.sidebar:
     
     selected = option_menu(
         "Navigation",
-        ["Management Dashboard", "Planung & Simulation 2026", "Kosten & OPEX Analyse", "Portfolio & Risiko", "Daten-Generator"],
-        icons=["columns-gap", "calculator", "wallet2", "bullseye", "database-add"],
+        ["Management Dashboard", "Planung & Simulation", "Szenario-Vergleich & Flow", "Daten-Generator"],
+        icons=["columns-gap", "calculator", "diagram-3", "database-add"],
         default_index=0,
     )
 
@@ -77,7 +71,6 @@ try:
     df_proj = pd.DataFrame(raw_projects) if raw_projects else pd.DataFrame()
     df_stats = pd.DataFrame(raw_stats) if raw_stats else pd.DataFrame()
     
-    # Alles in Kleinbuchstaben
     if not df_proj.empty: df_proj.columns = df_proj.columns.str.lower()
     if not df_stats.empty: df_stats.columns = df_stats.columns.str.lower()
     
@@ -92,9 +85,12 @@ if selected == "Management Dashboard":
     st.title("🏛️ Management Übersicht")
     
     if df_proj.empty:
-        st.warning("Keine Daten gefunden. Bitte gehe zuerst zum Reiter 'Daten-Generator'!")
+        st.warning("Keine Daten. Bitte zum 'Daten-Generator'!")
     else:
-        current_year = 2025
+        # Wir zeigen immer das aktuellste "Actual" Jahr
+        actual_years = sorted(df_proj[df_proj['scenario'] == 'Actual']['year'].unique())
+        current_year = actual_years[-1] if actual_years else 2025
+        
         df_p_curr = df_proj[(df_proj['year'] == current_year) & (df_proj['scenario'] == 'Actual')]
         df_s_curr = df_stats[(df_stats['year'] == current_year) & (df_stats['scenario'] == 'Actual')]
         df_p_prev = df_proj[(df_proj['year'] == current_year - 1) & (df_proj['scenario'] == 'Actual')]
@@ -102,298 +98,258 @@ if selected == "Management Dashboard":
         if not df_s_curr.empty:
             fte = df_s_curr.iloc[0]['fte_count']
             revenue = df_s_curr.iloc[0]['revenue']
-            
             total_budget = df_p_curr['cost_planned'].sum()
             prev_budget = df_p_prev['cost_planned'].sum() if not df_p_prev.empty else total_budget
             
-            capex = df_p_curr[df_p_curr['budget_type'] == 'CAPEX']['cost_planned'].sum()
-            opex = df_p_curr[df_p_curr['budget_type'] == 'OPEX']['cost_planned'].sum()
-            
-            spend_per_fte = total_budget / fte if fte > 0 else 0
-            it_revenue_ratio = (total_budget / revenue * 100) if revenue > 0 else 0
-            
-            # KPI CARDS (Deutsche Formate)
-            delta_budget = (total_budget-prev_budget)/prev_budget*100
+            # Neue KPI: Green IT Score (Simuliert)
+            # Annahme: Je mehr OPEX (Cloud), desto höher der Score (weil effizienter als eigene Server)
+            opex_share = df_p_curr[df_p_curr['budget_type'] == 'OPEX']['cost_planned'].sum() / total_budget
+            green_score = int(opex_share * 100) 
             
             c1, c2, c3, c4 = st.columns(4)
-            with c1: kpi_func("Gesamt IT-Budget", f"{fmt_de(total_budget/1000000, 2, 'M€')}", f"{fmt_de(delta_budget, 1, '%')} vs Vj.", "grey")
+            with c1: kpi_func("IT-Budget (Ist)", f"{fmt_de(total_budget/1000000, 2, 'M€')}", f"{fmt_de((total_budget-prev_budget)/prev_budget*100, 1, '%')} Wachstum", "grey")
             with c2: kpi_func("Mitarbeiter (FTE)", f"{fmt_de(fte, 0, '')}", "Köpfe", "grey")
-            with c3: kpi_func("IT-Kosten pro Kopf", f"{fmt_de(spend_per_fte, 0, '€')}", "Ø Benchmark: 8.500 €", "#6c5ce7")
-            with c4: kpi_func("IT-Quote (v. Umsatz)", f"{fmt_de(it_revenue_ratio, 2, '%')}", "Ziel: < 5%", "green" if it_revenue_ratio < 5 else "orange")
+            with c3: kpi_func("Green IT Score", f"{green_score}/100", "Cloud Efficiency Index", "green")
+            with c4: kpi_func("IT-Quote", f"{fmt_de(total_budget/revenue*100, 2, '%')}", "Ziel: < 5%", "orange")
             
             st.markdown("---")
             
             col_chart1, col_chart2 = st.columns([2, 1])
             with col_chart1:
-                st.subheader("Entwicklung: Budget vs. Mitarbeiter")
-                df_trend_p = df_proj[df_proj['scenario'] == 'Actual'].groupby('year')['cost_planned'].sum().reset_index()
-                df_trend_s = df_stats[df_stats['scenario'] == 'Actual'].groupby('year')['fte_count'].mean().reset_index()
-                df_merge = pd.merge(df_trend_p, df_trend_s, on='year')
-                
-                fig = go.Figure()
-                fig.add_trace(go.Bar(x=df_merge['year'], y=df_merge['cost_planned'], name="IT Budget (€)", marker_color='#6c5ce7'))
-                fig.add_trace(go.Scatter(x=df_merge['year'], y=df_merge['fte_count'], name="Mitarbeiter (FTE)", yaxis='y2', line=dict(color='orange', width=3)))
-                
-                fig.update_layout(
-                    yaxis=dict(title="Budget in €"), 
-                    yaxis2=dict(title="Anzahl FTE", overlaying='y', side='right'), 
-                    legend=dict(orientation="h", y=1.1),
-                    separators=",." # DEUTSCHE TRENNZEICHEN
-                )
+                st.subheader("Budget-Historie (Ist-Werte)")
+                df_trend = df_proj[df_proj['scenario'] == 'Actual'].groupby('year')['cost_planned'].sum().reset_index()
+                fig = px.bar(df_trend, x='year', y='cost_planned', text_auto='.2s', title="Budget Verlauf")
+                fig.update_traces(marker_color='#6c5ce7', textfont_size=14)
+                fig.update_layout(yaxis_title="Budget (€)", separators=",.")
                 st.plotly_chart(fig, use_container_width=True)
                 
             with col_chart2:
-                st.subheader("Split: Invest vs. Betrieb")
-                fig_pie = px.pie(df_p_curr, values='cost_planned', names='budget_type', 
-                                   color='budget_type', 
-                                   color_discrete_map={'CAPEX':'#00b894', 'OPEX':'#0984e3'}, hole=0.6)
-                fig_pie.update_layout(showlegend=True, margin=dict(t=0, b=0, l=0, r=0), separators=",.")
-                fig_pie.add_annotation(text=f"{fmt_de(opex/total_budget*100, 0, '%')}<br>OPEX", showarrow=False, font_size=20)
-                st.plotly_chart(fig_pie, use_container_width=True)
+                st.subheader("Portfolio Risiko Matrix")
+                fig_bub = px.scatter(df_p_curr, x="strategic_score", y="risk_factor", size="cost_planned", color="category",
+                                     size_max=40, title=f"Portfolio {current_year}")
+                fig_bub.update_layout(separators=",.")
+                st.plotly_chart(fig_bub, use_container_width=True)
 
 # ------------------------------------------------------------------
-# TAB 2: PLANUNG & SIMULATION 2026
+# TAB 2: PLANUNG & SIMULATION
 # ------------------------------------------------------------------
-elif selected == "Planung & Simulation 2026":
-    st.title("🔮 Szenario-Planer 2026")
+elif selected == "Planung & Simulation":
+    st.title("🔮 Szenario-Simulator 2026")
     
     if df_proj.empty:
-        st.warning("Keine Datenbasis für Simulation vorhanden.")
+        st.warning("Keine Datenbasis.")
     else:
         df_base = df_proj[(df_proj['year'] == 2025) & (df_proj['scenario'] == 'Actual')].copy()
-        stats_base = df_stats[(df_stats['year'] == 2025) & (df_stats['scenario'] == 'Actual')]
         
-        base_fte = stats_base.iloc[0]['fte_count'] if not stats_base.empty else 500
-        base_rev = stats_base.iloc[0]['revenue'] if not stats_base.empty else 80000000
+        st.markdown("### 1. Treiber einstellen")
+        c1, c2, c3, c4 = st.columns(4)
+        with c1: sim_inf = st.slider("Inflation", 0.0, 10.0, 3.0, format="%f%%") / 100
+        with c2: sim_fte = st.slider("FTE Wachstum", -5.0, 20.0, 5.0, format="%f%%") / 100
+        with c3: sim_lic = st.slider("Lizenzpreiserhöhung", 0.0, 20.0, 10.0, format="%f%%") / 100
+        with c4: sim_eff = st.slider("Effizienz (Savings)", 0.0, 10.0, 2.0, format="%f%%") / 100
 
-        # --- REGLER ---
-        st.markdown("### 1. Annahmen definieren")
-        c_in1, c_in2, c_in3, c_in4 = st.columns(4)
-        
-        with c_in1:
-            sim_inflation = st.slider("📈 Inflation / Dienstleister", 0.0, 15.0, 4.0, format="%f%%") / 100
-        with c_in2:
-            sim_fte_growth = st.slider("👥 FTE Wachstum (Mitarbeiter)", -10.0, 30.0, 5.0, format="%f%%") / 100
-        with c_in3:
-            sim_rev_growth = st.slider("💰 Erwarteter Umsatz", -5.0, 20.0, 8.0, format="%f%%") / 100
-        with c_in4:
-            sim_efficiency = st.slider("✂️ Effizienz-Ziel (Savings)", 0.0, 20.0, 2.0, format="%f%%") / 100
-
-        st.divider()
-
-        # --- BERECHNUNG ---
-        new_fte = int(base_fte * (1 + sim_fte_growth))
-        new_rev = base_rev * (1 + sim_rev_growth)
-        
+        # --- LOGIK ---
         df_sim = df_base.copy()
         df_sim['year'] = 2026
-        df_sim['scenario'] = 'Forecast'
-
-        def calculate_forecast(row):
+        
+        def calc_sim(row):
             cost = row['cost_planned']
-            opex_type = row.get('opex_type', '')
-            if opex_type == "Lizenzen (SaaS)" or opex_type == "Licenses (SaaS)":
-                return cost * (1 + sim_inflation) * (1 + sim_fte_growth)
+            if "Lizenzen" in str(row.get('opex_type', '')):
+                # Lizenzen = Preis * Menge (FTE)
+                return cost * (1 + sim_lic) * (1 + sim_fte)
             elif row['budget_type'] == 'OPEX':
-                return cost * (1 + sim_inflation)
-            else:
-                return cost * (1 + sim_inflation)
-
-        df_sim['cost_planned'] = df_sim.apply(calculate_forecast, axis=1)
-        df_sim['savings_planned'] = df_sim['savings_planned'] * (1 + sim_efficiency)
-
-        # --- ERGEBNIS ---
-        st.markdown("### 2. Simulations-Ergebnis")
+                return cost * (1 + sim_inf)
+            else: 
+                return cost * (1 + sim_inf) # Hardware
         
-        sim_budget = df_sim['cost_planned'].sum()
-        base_budget = df_base['cost_planned'].sum()
-        delta = sim_budget - base_budget
+        df_sim['cost_planned'] = df_sim.apply(calc_sim, axis=1)
         
-        sim_spend_per_fte = sim_budget / new_fte
-        sim_it_ratio = (sim_budget / new_rev * 100)
-
-        k1, k2, k3, k4 = st.columns(4)
-        k1.metric("Budget 2026 (Prognose)", f"{fmt_de(sim_budget/1000000, 2, 'M€')}", f"{fmt_de(delta/1000000, 2, 'M€')}", delta_color="inverse")
-        k2.metric("Mitarbeiter 2026", f"{fmt_de(new_fte, 0, '')}", f"{fmt_de(new_fte - base_fte, 0, 'Köpfe')}")
-        k3.metric("IT-Kosten / Kopf", f"{fmt_de(sim_spend_per_fte, 0, '€')}", f"{fmt_de(sim_spend_per_fte - (base_budget/base_fte), 0, '€')}", delta_color="inverse")
-        k4.metric("IT-Quote", f"{fmt_de(sim_it_ratio, 2, '%')}", f"{fmt_de(sim_it_ratio - (base_budget/base_rev*100), 2, '%')}", delta_color="inverse")
-
-        st.markdown("")
-        col_v1, col_v2 = st.columns([2, 1])
+        # --- ERGEBNIS & SPEICHERN ---
+        sim_sum = df_sim['cost_planned'].sum()
+        base_sum = df_base['cost_planned'].sum()
         
-        with col_v1:
-            st.subheader("Budget-Überleitung (Waterfall)")
-            effect_price = base_budget * sim_inflation
-            effect_volume = delta - effect_price
+        st.divider()
+        c_res1, c_res2 = st.columns([2, 1])
+        
+        with c_res1:
+            st.subheader("Simulations-Ergebnis")
+            st.metric("Budget 2026 Prognose", fmt_de(sim_sum, 0, "€"), delta=fmt_de(sim_sum-base_sum, 0, "€"), delta_color="inverse")
             
-            fig_water = go.Figure(go.Waterfall(
-                name = "2026", orientation = "v",
-                measure = ["relative", "relative", "relative", "total"],
-                x = ["Budget 2025", "Preis-Effekte", "Mengen-Effekte", "Budget 2026"],
-                textposition = "outside",
-                # Hier nutzen wir auch die deutsche Formatierung
-                text = [
-                    f"{fmt_de(base_budget/1000000, 1, 'M€')}", 
-                    f"+{fmt_de(effect_price/1000000, 1, 'M€')}", 
-                    f"+{fmt_de(effect_volume/1000000, 1, 'M€')}", 
-                    f"{fmt_de(sim_budget/1000000, 1, 'M€')}"
-                ],
-                y = [base_budget, effect_price, effect_volume, sim_budget],
-                connector = {"line":{"color":"rgb(63, 63, 63)"}},
-                decreasing = {"marker":{"color":"#00b894"}},
-                increasing = {"marker":{"color":"#d63031"}},
-                totals = {"marker":{"color":"#636e72"}}
-            ))
-            fig_water.update_layout(title="Kostentreiber Analyse", waterfallgap = 0.3, separators=",.")
-            st.plotly_chart(fig_water, use_container_width=True)
-
-        with col_v2:
-            st.subheader("Top Kostentreiber 2026")
-            top_costs = df_sim.sort_values(by='cost_planned', ascending=False).head(5)
-            # Kopie für Anzeige erstellen und formatieren
-            display_df = top_costs[['project_name', 'cost_planned']].copy()
-            display_df['cost_planned'] = display_df['cost_planned'].apply(lambda x: fmt_de(x, 2, '€'))
-            display_df = display_df.rename(columns={'project_name': 'Projekt', 'cost_planned': 'Kosten'})
-            st.dataframe(display_df, hide_index=True)
+            # --- DER NEUE SAVE BUTTON ---
+            st.markdown("### 💾 Szenario speichern")
+            with st.form("save_scenario"):
+                scenario_name = st.text_input("Name des Szenarios (z.B. 'Best Case', 'Aggressives Wachstum')", value="Szenario A")
+                submitted = st.form_submit_button("Szenario in Datenbank schreiben", type="primary")
+                
+                if submitted:
+                    # Daten vorbereiten für Upload
+                    # Wir müssen das DataFrame in eine Liste von dicts umwandeln
+                    # Und wichtig: Das Szenario-Feld setzen!
+                    df_upload = df_sim.copy()
+                    df_upload['scenario'] = scenario_name
+                    # ID muss weg, da neu generiert wird
+                    if 'id' in df_upload.columns: del df_upload['id']
+                    if 'created_at' in df_upload.columns: del df_upload['created_at']
+                    
+                    # Umwandeln und senden
+                    records = df_upload.to_dict('records')
+                    try:
+                        # Vorher altes Szenario gleichen Namens löschen, um Duplikate zu vermeiden? 
+                        # Fürs erste lassen wir es einfach hinzufügen (Versionierung)
+                        insert_bulk_projects(records)
+                        st.success(f"Szenario '{scenario_name}' erfolgreich gespeichert! Wechsel zum Tab 'Szenario-Vergleich'.")
+                    except Exception as e:
+                        st.error(f"Fehler: {e}")
 
 # ------------------------------------------------------------------
-# TAB 3: KOSTEN & OPEX ANALYSE
+# TAB 3: SZENARIO VERGLEICH & FLOW (NEU!)
 # ------------------------------------------------------------------
-elif selected == "Kosten & OPEX Analyse":
-    st.title("💸 Kostenstruktur Detail-Analyse")
+elif selected == "Szenario-Vergleich & Flow":
+    st.title("⚖️ Strategischer Vergleich & Geldfluss")
     
     if df_proj.empty:
         st.warning("Keine Daten.")
     else:
-        year_filter = st.selectbox("Geschäftsjahr wählen", sorted(df_proj['year'].unique(), reverse=True))
-        df_yr = df_proj[(df_proj['year'] == year_filter) & (df_proj['scenario'] == 'Actual')]
+        # Welche Szenarien gibt es? (Actual + die gespeicherten)
+        available_scenarios = df_proj['scenario'].unique()
         
-        st.subheader(f"Drill-Down: Wohin fließt das Geld in {year_filter}?")
-        df_yr['opex_type'] = df_yr['opex_type'].fillna("Investition")
+        # 1. VERGLEICH
+        st.subheader("1. Szenario-Vergleich (Budget 2026)")
         
-        fig_sun = px.sunburst(df_yr, path=['budget_type', 'category', 'opex_type', 'project_name'], values='cost_planned',
-                              color='category', color_discrete_sequence=px.colors.qualitative.Pastel)
-        fig_sun.update_layout(height=700, separators=",.")
-        st.plotly_chart(fig_sun, use_container_width=True)
+        # Wir filtern auf 2026 (oder das Simulationsjahr)
+        # Wenn wir nur Actual haben, macht Vergleich keinen Sinn, daher prüfen
+        scenarios_to_compare = st.multiselect("Wähle Szenarien zum Vergleich:", available_scenarios, default=available_scenarios)
         
-        st.markdown("### Top Einzelpositionen")
-        top_list = df_yr.sort_values(by='cost_planned', ascending=False)[['project_name', 'category', 'cost_planned', 'status']].head(10)
-        # Tabelle schön formatieren
-        top_list['cost_planned'] = top_list['cost_planned'].apply(lambda x: fmt_de(x, 2, '€'))
-        st.dataframe(top_list)
+        if scenarios_to_compare:
+            df_comp = df_proj[df_proj['scenario'].isin(scenarios_to_compare)].groupby(['scenario', 'year'])['cost_planned'].sum().reset_index()
+            
+            fig_comp = px.bar(df_comp, x='scenario', y='cost_planned', color='scenario', 
+                              text_auto='.2s', title="Budget-Vergleich Total",
+                              color_discrete_sequence=px.colors.qualitative.Prism)
+            fig_comp.update_layout(yaxis_title="Budget (€)", separators=",.")
+            st.plotly_chart(fig_comp, use_container_width=True)
+        
+        st.divider()
+        
+        # 2. SANKEY DIAGRAMM (Das "Spacige")
+        st.subheader("2. Geldfluss-Analyse (Sankey Flow)")
+        st.info("Visualisiert den Fluss: Budget-Art -> Kategorie -> Top Projekte")
+        
+        # Welches Szenario wollen wir visualisieren?
+        selected_scen = st.selectbox("Szenario für Flow wählen:", available_scenarios, index=0)
+        df_flow = df_proj[df_proj['scenario'] == selected_scen].copy()
+        
+        # Wir müssen die Daten aggregieren für das Sankey
+        # Level 1: Budget Type (CAPEX/OPEX) -> Category
+        # Level 2: Category -> Project (Top 10)
+        
+        # Sankey braucht: Source (Index), Target (Index), Value
+        # Wir bauen eine Liste aller Labels
+        
+        # Wir nehmen nur die Top 15 teuersten Projekte, sonst wird die Grafik zu voll
+        top_projects = df_flow.sort_values('cost_planned', ascending=False).head(15)
+        
+        # Alle Knoten sammeln
+        labels = []
+        source = []
+        target = []
+        value = []
+        
+        # Knoten definieren
+        budget_types = list(top_projects['budget_type'].unique())
+        categories = list(top_projects['category'].unique())
+        projects = list(top_projects['project_name'].unique())
+        
+        labels = budget_types + categories + projects
+        
+        # Helper um Index zu finden
+        def get_idx(name): return labels.index(name)
+        
+        # Link 1: Budget Type -> Category
+        grp1 = top_projects.groupby(['budget_type', 'category'])['cost_planned'].sum().reset_index()
+        for _, row in grp1.iterrows():
+            source.append(get_idx(row['budget_type']))
+            target.append(get_idx(row['category']))
+            value.append(row['cost_planned'])
+            
+        # Link 2: Category -> Project
+        for _, row in top_projects.iterrows():
+            source.append(get_idx(row['category']))
+            target.append(get_idx(row['project_name']))
+            value.append(row['cost_planned'])
+            
+        # Farben generieren (Spacey Theme)
+        node_colors = ["#6c5ce7"] * len(budget_types) + ["#00b894"] * len(categories) + ["#a29bfe"] * len(projects)
+        
+         
+
+        fig_sankey = go.Figure(data=[go.Sankey(
+            node = dict(
+              pad = 15,
+              thickness = 20,
+              line = dict(color = "black", width = 0.5),
+              label = labels,
+              color = node_colors
+            ),
+            link = dict(
+              source = source,
+              target = target,
+              value = value,
+              color = "rgba(100, 100, 100, 0.2)" # Halb-transparente Verbindungen
+          ))])
+        
+        fig_sankey.update_layout(title_text=f"Budget Flussdiagramm ({selected_scen})", font_size=12, height=600)
+        st.plotly_chart(fig_sankey, use_container_width=True)
 
 # ------------------------------------------------------------------
-# TAB 4: PORTFOLIO & RISIKO
-# ------------------------------------------------------------------
-elif selected == "Portfolio & Risiko":
-    st.title("🎯 Strategisches Portfolio")
-    
-    if df_proj.empty:
-        st.warning("Keine Daten.")
-    else:
-        current_year = 2025
-        df_curr = df_proj[df_proj['year'] == current_year]
-        
-        c1, c2 = st.columns([3, 1])
-        with c1:
-            st.subheader("Matrix: Risiko vs. Strategischer Wert")
-            fig_bub = px.scatter(df_curr, x="strategic_score", y="risk_factor",
-                                 size="cost_planned", color="category",
-                                 hover_name="project_name", size_max=60,
-                                 labels={"strategic_score": "Strategischer Wert (Business Impact)", "risk_factor": "Implementierungs-Risiko"},
-                                 title=f"Projekt-Landschaft {current_year}")
-            
-            fig_bub.add_hrect(y0=2.5, y1=5, line_width=0, fillcolor="red", opacity=0.1, annotation_text="Hohes Risiko")
-            fig_bub.add_vrect(x0=5, x1=10, line_width=0, fillcolor="green", opacity=0.1, annotation_text="Hoher Wert")
-            fig_bub.update_layout(xaxis=dict(range=[0, 11]), yaxis=dict(range=[0, 6]), separators=",.")
-            st.plotly_chart(fig_bub, use_container_width=True)
-            
-        with c2:
-            st.markdown("### Top Strategische Wetten")
-            top_strats = df_curr[df_curr['strategic_score'] >= 8].sort_values(by='strategic_score', ascending=False)
-            for index, row in top_strats.head(5).iterrows():
-                st.info(f"**{row['project_name']}**\n\nScore: {row['strategic_score']}/10\n\nInvest: {fmt_de(row['cost_planned']/1000, 0, 'k€')}")
-
-# ------------------------------------------------------------------
-# TAB 5: DATEN GENERATOR
+# TAB 4: DATEN GENERATOR
 # ------------------------------------------------------------------
 elif selected == "Daten-Generator":
-    st.title("⚙️ Simulations-Engine")
+    st.title("⚙️ System-Reset & Daten")
     
     col1, col2 = st.columns(2)
     with col1:
-        st.markdown("""
-        **Generiert ein konsistentes Datenmodell (DEUTSCH):**
-        1. Generiert FTE & Umsatz Historie (2023-2025)
-        2. Berechnet Basiskosten (Lizenzen = Mitarbeiter * Preis)
-        3. Erzeugt Projekt-Portfolio mit Abhängigkeiten
-        """)
-        
-        if st.button("🚨 Alles löschen & Neu Generieren", type="primary"):
-            with st.spinner("Bereinige Datenbank..."):
+        st.markdown("**Reset:** Löscht alles und erstellt Basis-Daten für 2023-2025.")
+        if st.button("🚨 System zurücksetzen & Neu Generieren", type="primary"):
+            with st.spinner("Arbeite..."):
                 delete_all_projects()
                 delete_all_stats()
-            
-            with st.spinner("Generiere Szenarien..."):
-                years = [2023, 2024, 2025] 
-                base_fte = 500
-                base_revenue = 80000000
                 
-                stats_data = []
-                for y in years:
+                # Stats
+                stats = []
+                base_fte, base_rev = 500, 80000000
+                for y in [2023, 2024, 2025]:
                     base_fte = int(base_fte * 1.05)
-                    base_revenue = base_revenue * 1.07
-                    stats_data.append({"year": y, "fte_count": base_fte, "revenue": base_revenue, "scenario": "Actual"})
-                insert_bulk_stats(stats_data)
+                    base_rev *= 1.07
+                    stats.append({"year": y, "fte_count": base_fte, "revenue": base_rev, "scenario": "Actual"})
+                insert_bulk_stats(stats)
                 
-                projects_data = []
-                categories = ["Digitaler Arbeitsplatz", "Cloud Plattform", "Cyber Security", "ERP & Business Apps", "Data & KI"]
+                # Projekte
+                projs = []
+                cats = ["Digital Workplace", "Cloud Platform", "Cyber Security", "ERP Core", "Data Analytics"]
                 
-                for stat in stats_data:
-                    year = stat['year']
-                    fte = stat['fte_count']
-                    
-                    projects_data.append({
-                        "project_name": "Globale Software Lizenzen (M365)",
-                        "category": "Digitaler Arbeitsplatz",
-                        "opex_type": "Lizenzen (SaaS)",
-                        "budget_type": "OPEX",
-                        "year": year,
-                        "cost_planned": fte * 1200, 
-                        "savings_planned": 0,
+                for s in stats:
+                    # Fixkosten
+                    projs.append({
+                        "project_name": "M365 Lizenzen Global", "category": "Digital Workplace",
+                        "opex_type": "Lizenzen", "budget_type": "OPEX", "year": s['year'],
+                        "cost_planned": s['fte_count'] * 1200, "savings_planned": 0,
                         "risk_factor": 1, "strategic_score": 10, "status": "Live", "scenario": "Actual"
                     })
-                    
-                    for i in range(8):
-                        cat = random.choice(categories)
-                        cost = random.randint(20000, 500000)
-                        
-                        if "Cloud" in cat or "Lizenzen" in str(cat):
-                            b_type, o_type = "OPEX", "Cloud Infra"
-                        else:
-                            b_type, o_type = ("CAPEX", None) if random.random() > 0.5 else ("OPEX", "Beratung")
-
-                        projects_data.append({
-                            "project_name": f"{cat} Initiative {random.choice(['Alpha', 'Phoenix', 'Nexus'])} {i}",
-                            "category": cat,
-                            "opex_type": o_type,
-                            "budget_type": b_type,
-                            "year": year,
-                            "cost_planned": cost,
-                            "savings_planned": cost * random.uniform(0, 2.0),
-                            "risk_factor": random.randint(1, 5),
-                            "strategic_score": random.randint(1, 10),
-                            "status": "Live",
-                            "scenario": "Actual"
+                    # Variable Projekte
+                    for i in range(10):
+                        cat = random.choice(cats)
+                        cost = random.randint(50000, 800000)
+                        b_type = "OPEX" if "Cloud" in cat else ("CAPEX" if random.random() > 0.6 else "OPEX")
+                        projs.append({
+                            "project_name": f"{cat} Initative {i+1}", "category": cat,
+                            "opex_type": "Cloud" if b_type=="OPEX" else "", "budget_type": b_type,
+                            "year": s['year'], "cost_planned": cost, "savings_planned": cost * 0.5,
+                            "risk_factor": random.randint(1,5), "strategic_score": random.randint(1,10),
+                            "status": "Live", "scenario": "Actual"
                         })
-
-                insert_bulk_projects(projects_data)
+                insert_bulk_projects(projs)
                 
-            st.success("✅ Deutsche Datensätze erfolgreich generiert!")
+            st.success("System erfolgreich resettet!")
             time.sleep(1)
             st.rerun()
-
-    with col2:
-        st.info("Datenstruktur:")
-        st.markdown("- **Company Stats:** FTE, Umsatz pro Jahr")
-        st.markdown("- **Projekte:** Verknüpft mit FTE (z.B. Lizenzkosten steigen automatisch).")
