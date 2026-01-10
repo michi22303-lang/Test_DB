@@ -10,7 +10,7 @@ import time
 # Imports aus database.py
 from database import insert_bulk_projects, get_projects, insert_bulk_stats, get_stats, delete_all_projects, delete_all_stats, insert_bulk_actuals, get_actuals, delete_all_actuals
 
-st.set_page_config(page_title="CIO Cockpit 14.0 - Full Data Model", layout="wide", page_icon="🏢")
+st.set_page_config(page_title="CIO Cockpit 15.0 - The Gauge is Back", layout="wide", page_icon="🏢")
 
 # --- HELPER ---
 def fmt_de(value, decimals=0, suffix="€"):
@@ -118,7 +118,7 @@ except Exception as e:
     df_proj, df_stats, df_act = pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
 
 # ------------------------------------------------------------------
-# TAB 1: DASHBOARD
+# TAB 1: DASHBOARD (JETZT MIT GAUGE CHART)
 # ------------------------------------------------------------------
 if selected == "Management Dashboard":
     st.title("🏛️ Management Dashboard (2026)")
@@ -143,7 +143,7 @@ if selected == "Management Dashboard":
         plan_total = df_plan['cost_planned'].sum()
         consumption = (actual_total / plan_total * 100) if plan_total > 0 else 0
         
-        # STATS (FTE) für 2025 (als letzte Basis) laden, falls 2026 noch nicht da
+        # STATS 2025
         if not df_stats.empty:
             stats_curr = df_stats[df_stats['year'] == 2025]
             fte = stats_curr.iloc[0]['fte_count'] if not stats_curr.empty else 0
@@ -160,17 +160,15 @@ if selected == "Management Dashboard":
         
         col_main, col_side = st.columns([2, 1])
         with col_main:
-            st.subheader("Plan vs. Ist (Kategorie)")
-            # Aggregation Plan
+            st.subheader("Plan vs. Ist (Pro Kategorie)")
+            
             pg = df_plan.groupby('category')['cost_planned'].sum().reset_index()
-            pg['Type'] = 'Plan'
-            pg.rename(columns={'cost_planned':'Value'}, inplace=True)
-            # Aggregation Ist
+            pg['Type'] = 'Plan'; pg.rename(columns={'cost_planned':'Value'}, inplace=True)
+            
             if not df_act_2026.empty:
                 m = pd.merge(df_act_2026, df_proj[['id', 'category']], left_on='project_id', right_on='id', how='left')
                 ag = m.groupby('category')['cost_actual'].sum().reset_index()
-                ag['Type'] = 'Ist'
-                ag.rename(columns={'cost_actual':'Value'}, inplace=True)
+                ag['Type'] = 'Ist'; ag.rename(columns={'cost_actual':'Value'}, inplace=True)
                 chart_df = pd.concat([pg, ag])
             else: chart_df = pg
             
@@ -180,12 +178,37 @@ if selected == "Management Dashboard":
             st.plotly_chart(fig, use_container_width=True)
             
         with col_side:
-            st.subheader("Plan Struktur")
-            if not df_plan.empty:
-                figp = px.pie(df_plan, values='cost_planned', names='budget_type', hole=0.6, color='budget_type',
-                              color_discrete_map={'CAPEX':'#00b894', 'OPEX':'#0984e3'})
-                figp.update_layout(template=plotly_template, showlegend=True, margin=dict(t=0, b=0, l=0, r=0))
-                st.plotly_chart(figp, use_container_width=True)
+            st.subheader("Budget Auslastung")
+            
+            # --- HIER IST DIE GAUGE CHART WIEDER! ---
+            max_val = plan_total if plan_total > 0 else 100
+            
+            fig_gauge = go.Figure(go.Indicator(
+                mode = "gauge+number",
+                value = actual_total,
+                domain = {'x': [0, 1], 'y': [0, 1]},
+                title = {'text': "Ist vs. Plan", 'font': {'size': 20, 'color': text_color}},
+                number = {'font': {'color': text_color}},
+                gauge = {
+                    'axis': {'range': [None, max_val], 'tickwidth': 1, 'tickcolor': text_color},
+                    'bar': {'color': "#6c5ce7"},
+                    'bgcolor': "rgba(0,0,0,0)",
+                    'borderwidth': 2,
+                    'bordercolor': "gray",
+                    'steps': [
+                        {'range': [0, max_val*0.75], 'color': "rgba(0, 184, 148, 0.3)"},  # Grün
+                        {'range': [max_val*0.75, max_val*0.95], 'color': "rgba(253, 203, 110, 0.3)"}, # Gelb
+                        {'range': [max_val*0.95, max_val*1.5], 'color': "rgba(214, 48, 49, 0.3)"} # Rot
+                    ],
+                    'threshold': {
+                        'line': {'color': "red", 'width': 4},
+                        'thickness': 0.75,
+                        'value': max_val
+                    }
+                }
+            ))
+            fig_gauge.update_layout(height=350, margin=dict(t=30,b=10,l=10,r=10), paper_bgcolor='rgba(0,0,0,0)', font={'color': text_color})
+            st.plotly_chart(fig_gauge, use_container_width=True)
 
 # ------------------------------------------------------------------
 # TAB 2: OPEX BASIS
@@ -295,7 +318,6 @@ elif selected == "Szenario-Simulator":
         sim_eff = c3.slider("Effizienz-Ziel (Savings)", 0.0, 10.0, 2.0, format="%f%%") / 100
         
         df_sim = basis_2026.copy()
-        
         def smart_calc(row):
             cost = row['cost_planned']
             cat = str(row.get('category', ''))
@@ -309,7 +331,6 @@ elif selected == "Szenario-Simulator":
         df_sim['cost_planned'] = df_sim['cost_planned'] * (1 - sim_eff)
         
         sim_val = df_sim['cost_planned'].sum()
-        
         st.divider()
         c_r1, c_r2 = st.columns(2)
         c_r1.metric("Simuliertes Budget", fmt_de(sim_val), delta=fmt_de(sim_val - base_val), delta_color="inverse")
@@ -321,8 +342,7 @@ elif selected == "Szenario-Simulator":
                     df_sim['scenario'] = n
                     if 'id' in df_sim: del df_sim['id']
                     if 'created_at' in df_sim: del df_sim['created_at']
-                    insert_bulk_projects(df_sim.to_dict('records'))
-                    st.success("Gespeichert!")
+                    insert_bulk_projects(df_sim.to_dict('records')); st.success("Gespeichert!")
 
 # ------------------------------------------------------------------
 # TAB 5, 6, 7 (VERGLEICH, ANALYSE, PORTFOLIO)
@@ -349,6 +369,9 @@ elif selected == "Szenario-Vergleich":
                 g1 = top.groupby(['budget_type', 'category'])['cost_planned'].sum().reset_index()
                 for _,r in g1.iterrows(): src.append(idx(r['budget_type'])); tgt.append(idx(r['category'])); val.append(r['cost_planned'])
                 for _,r in top.iterrows(): src.append(idx(r['category'])); tgt.append(idx(r['project_name'])); val.append(r['cost_planned'])
+                
+                
+
                 cols = ["#6c5ce7"]*10 + ["#00b894"]*10 + ["#a29bfe"]*20
                 fig_s = go.Figure(data=[go.Sankey(node=dict(label=lbl, color=cols, pad=20, thickness=20, line=dict(color="black", width=0.5)),
                                                   link=dict(source=src, target=tgt, value=val, color="rgba(100,100,100,0.3)"))])
@@ -375,7 +398,7 @@ elif selected == "Portfolio & Risiko":
             st.plotly_chart(fig, use_container_width=True)
 
 # ------------------------------------------------------------------
-# TAB 8: DATEN MANAGER (HIER SIND DIE MITARBEITER DATEN!)
+# TAB 8: DATEN MANAGER (MIT FTE LOGIK)
 # ------------------------------------------------------------------
 elif selected == "Daten-Manager":
     st.title("💾 Daten Management")
@@ -391,24 +414,17 @@ elif selected == "Daten-Manager":
             years = [2022, 2023, 2024, 2025]
             
             for y in years:
-                # 1. Mitarbeiter & Umsatz berechnen (Wachstum simulieren)
-                fte = int(500 * (1.05**(y-2022))) # 5% Wachstum pro Jahr
-                rev = 80000000 * (1.07**(y-2022)) # 7% Umsatzwachstum
-                
-                # In Datenbank schreiben
+                fte = int(500 * (1.05**(y-2022)))
+                rev = 80000000 * (1.07**(y-2022))
                 stats_list.append({"year": y, "fte_count": fte, "revenue": rev, "scenario": "Actual"})
                 
-                # 2. Projekte basierend auf FTE
-                # OPEX Basis
                 projs_list.append({"project_name": "M365 Lizenzen", "category": "Digitaler Arbeitsplatz", "budget_type": "OPEX", "opex_type": "Lizenzen", "year": y, "cost_planned": fte*1200, "scenario": "Actual", "status": "Live"})
                 projs_list.append({"project_name": "Rechenzentrum", "category": "Infrastruktur", "budget_type": "OPEX", "opex_type": "Cloud", "year": y, "cost_planned": 300000, "scenario": "Actual", "status": "Live"})
-                # Zufällige Projekte
                 for i in range(4):
                     projs_list.append({"project_name": f"Projekt {y}-{i}", "category": random.choice(["Cloud","Security"]), "budget_type": "CAPEX", "year": y, "cost_planned": random.randint(50000, 200000), "scenario": "Actual", "status": "Closed"})
             
-            insert_bulk_stats(stats_list) # <-- HIER WERDEN DIE MITARBEITER GESPEICHERT
+            insert_bulk_stats(stats_list) 
             insert_bulk_projects(projs_list)
-            
             st.success("Historie inkl. Mitarbeiterzahlen erstellt!"); time.sleep(1); st.rerun()
             
     with t2:
@@ -423,8 +439,6 @@ elif selected == "Daten-Manager":
                 insert_bulk_actuals(a)
                 st.success("Gebucht!"); time.sleep(1); st.rerun()
 
-    with t3:
-        st.write("CSV Import für Actuals möglich.")
-        
+    with t3: st.write("CSV Import möglich.")
     with t4:
         if st.button("Alles löschen"): delete_all_projects(); delete_all_stats(); delete_all_actuals(); st.rerun()
