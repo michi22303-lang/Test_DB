@@ -14,7 +14,7 @@ def insert_messwert(kategorie, wert, kommentar):
     # Hier bauen wir das Dictionary für deine Spalten
     # Deine Spalte heißt "wert", also muss der Key hier auch "wert" heißen!
     data = {
-        "kategorie": kategorie, 
+        "Kategorie": kategorie, 
         "wert": wert,          # Deine Spalte in Supabase
         "kommentar": kommentar
     }
