@@ -5,7 +5,7 @@ import plotly.graph_objects as go
 import pandas as pd
 import numpy as np
 import random
-import time
+import time  # Wichtig für time.sleep()
 
 # Imports aus database.py
 from database import insert_bulk_projects, get_projects, insert_bulk_stats, get_stats, delete_all_projects, delete_all_stats
@@ -78,7 +78,7 @@ if selected == "Executive Dashboard":
     st.title("🏛️ Executive Overview")
     
     if df_proj.empty or df_stats.empty:
-        st.warning("Keine Daten. Bitte zuerst zum 'Data Generator'!")
+        st.warning("Keine Daten. Bitte zuerst zum Tab 'Data Generator' gehen!")
     else:
         # Filter auf aktuelles Jahr (Beispiel 2025)
         current_year = 2025
@@ -140,8 +140,11 @@ if selected == "Executive Dashboard":
                 
             with col_chart2:
                 st.subheader("CAPEX vs. OPEX Split")
-                fig_pie = px.donut(df_p_curr, values='cost_planned', names='budget_type', 
-                                   color='budget_type', color_discrete_map={'CAPEX':'#00b894', 'OPEX':'#0984e3'}, hole=0.6)
+                # HIER WAR DER FEHLER: px.pie STATT px.donut
+                fig_pie = px.pie(df_p_curr, values='cost_planned', names='budget_type', 
+                                   color='budget_type', 
+                                   color_discrete_map={'CAPEX':'#00b894', 'OPEX':'#0984e3'}, 
+                                   hole=0.6) # hole macht es zum Donut
                 fig_pie.update_layout(showlegend=True, margin=dict(t=0, b=0, l=0, r=0))
                 # Text in die Mitte
                 fig_pie.add_annotation(text=f"{opex/total_budget*100:.0f}%<br>OPEX", showarrow=False, font_size=20)
