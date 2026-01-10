@@ -118,3 +118,31 @@ elif selected == "Visualisierung":
                 fig_bar = px.bar(df, x=x_axis, y='wert', color='kategorie',
                                  title="Balkendiagramm")
                 st.plotly_chart(fig_bar, use_container_width=True)
+st.divider()
+
+        # --- DER NEUE LÖSCH-BEREICH ---
+        with st.expander("🗑️ Datensätze verwalten / löschen"):
+            st.warning("Achtung: Gelöschte Daten können nicht wiederhergestellt werden.")
+            
+            # Wir erstellen eine Liste für die Auswahlbox, die ID und Infos kombiniert
+            # Beispiel-Format: "ID 12 | Umsatz | 100€"
+            options = [f"ID {row['id']} | {row['kategorie']} | {row['wert']}€ | {row.get('kommentar', '')}" for row in raw_data]
+            
+            if options:
+                selected_option = st.selectbox("Wähle einen Eintrag zum Löschen:", options)
+                
+                # Wir müssen die ID aus dem String wieder herausfischen (die Zahl nach "ID ")
+                # Wir splitten den String beim ersten Leerzeichen und nehmen das zweite Element
+                selected_id = selected_option.split(" |")[0].replace("ID ", "")
+                
+                if st.button("Eintrag endgültig löschen 🚨"):
+                    from database import delete_messwert # Import hier oder ganz oben
+                    try:
+                        delete_messwert(selected_id)
+                        st.success(f"Eintrag {selected_id} wurde gelöscht!")
+                        time.sleep(1)
+                        st.rerun() # Lädt die App neu, damit der Eintrag sofort verschwindet
+                    except Exception as e:
+                        st.error(f"Fehler beim Löschen: {e}")
+            else:
+                st.write("Keine Daten zum Löschen vorhanden.")
