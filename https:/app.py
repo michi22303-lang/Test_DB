@@ -14,81 +14,85 @@ st.set_page_config(
     layout="wide"
 )
 
-# --- 2. CSS & DESIGN-FUNKTIONEN (Der "Angular Material" Teil) ---
+# --- 2. CSS & DESIGN (ADAPTIV: DARK & LIGHT MODE) ---
 def local_css():
     st.markdown("""
     <style>
-        /* Hintergrund etwas heller machen */
+        /* Container Abstände */
         .block-container {
             padding-top: 2rem;
             padding-bottom: 2rem;
         }
         
-        /* Überschriften stylen */
-        h1, h2, h3 {
-            font-family: 'Roboto', sans-serif;
-            color: #2c3e50;
-        }
-
-        /* CARD STYLE: Das hier erzeugt den "Angular Material"-Look */
+        /* CARD DESIGN: Nutzt Streamlit-Variablen für Auto-Dark-Mode */
         div.css-card {
-            background-color: #FFFFFF;
+            background-color: var(--secondary-background-color); /* Passt sich an */
+            border: 1px solid rgba(128, 128, 128, 0.2); /* Dezenter grauer Rand */
             padding: 20px;
-            border-radius: 10px;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); /* Der Schatten */
-            transition: transform 0.2s; /* Für Hover-Effekt */
-            border-left: 5px solid #2E86C1; /* Der blaue Balken links */
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05); /* Sehr weicher Schatten */
+            transition: transform 0.2s, box-shadow 0.2s;
+            border-left: 6px solid #3498db; /* Unser Blau-Ton als Akzent */
             text-align: center;
             margin-bottom: 20px;
         }
         
-        /* Hover-Effekt: Karte hebt sich beim Drüberfahren */
+        /* Hover-Effekt */
         div.css-card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 10px 15px rgba(0, 0, 0, 0.2);
+            transform: translateY(-4px);
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.15);
+            border-left: 6px solid #85c1e9; /* Helleres Blau beim Hover */
         }
 
-        /* Text in der Karte */
+        /* Titel der Karte (Grau-Ton) */
         div.card-title {
-            color: #6c757d;
+            color: var(--text-color); /* Passt sich an */
+            opacity: 0.7; /* Leicht ausgegraut für Eleganz */
             font-size: 14px;
-            font-weight: 600;
+            font-weight: 500;
             text-transform: uppercase;
-            letter-spacing: 1px;
+            letter-spacing: 1.5px;
+            margin-bottom: 5px;
         }
         
+        /* Der Wert (Fett & Groß) */
         div.card-value {
-            color: #2c3e50;
-            font-size: 32px;
-            font-weight: bold;
-            margin-top: 10px;
+            color: var(--text-color); /* Passt sich an */
+            font-size: 36px;
+            font-weight: 700;
+            font-family: 'Segoe UI', sans-serif;
         }
         
+        /* Das Icon (Blau) */
         div.card-icon {
-            font-size: 24px;
-            margin-bottom: 10px;
+            color: #3498db;
+            font-size: 28px;
+            margin-bottom: 15px;
         }
     </style>
     """, unsafe_allow_html=True)
 
-# CSS laden
 local_css()
 
-# --- 3. SIDEBAR ---
+# --- 3. SIDEBAR (Blau/Grau Style) ---
 with st.sidebar:
+    # Hier können wir leider die Farben nicht per CSS ändern, das macht die Library.
+    # Aber wir wählen Icons, die seriös wirken.
     selected = option_menu(
-        menu_title="Menü",
+        menu_title="Navigation",
         options=["Eingabe", "Visualisierung"],
-        icons=["pencil-square", "bar-chart-fill"],
+        icons=["pencil-square", "graph-up"], # Modernere Icons
         default_index=0,
+        styles={
+            "nav-link-selected": {"background-color": "#3498db"}, # Unser Blau
+        }
     )
 
 # --- 4. SEITE: EINGABE ---
 if selected == "Eingabe":
-    st.title("📝 Neuen Datensatz erfassen")
-    st.markdown("Füge hier neue Daten hinzu. Sie landen sofort in der **Supabase Cloud**.")
+    st.title("📝 Datenerfassung")
+    st.caption("Füge neue Messwerte zur Datenbank hinzu.")
     
-    # Ein Container, damit es aufgeräumter aussieht
     with st.container():
         st.write("---")
         with st.form("entry_form", clear_on_submit=True):
@@ -101,108 +105,97 @@ if selected == "Eingabe":
                 
             kommentar = st.text_area("Kommentar (optional)")
             
-            # Button etwas breiter machen
-            submitted = st.form_submit_button("💾 In Cloud speichern", use_container_width=True)
+            # Button in Primary Color (Streamlit Standard oder User Config)
+            submitted = st.form_submit_button("💾 Speichern", use_container_width=True)
             
             if submitted:
                 try:
                     insert_messwert(kategorie, wert, kommentar)
-                    st.success("Erfolgreich gespeichert! Geh zum Tab 'Visualisierung'.")
+                    st.success("Daten erfolgreich übermittelt!")
                 except Exception as e:
-                    st.error(f"Fehler beim Speichern: {e}")
+                    st.error(f"Fehler: {e}")
 
 # --- 5. SEITE: VISUALISIERUNG ---
 elif selected == "Visualisierung":
-    st.title("📊 Dashboard & Analyse")
+    st.title("📊 Dashboard")
     
     try:
         raw_data = get_all_messwerte()
     except Exception as e:
-        st.error(f"Verbindungsfehler: {e}")
+        st.error(f"Datenbank nicht erreichbar: {e}")
         raw_data = []
 
     if not raw_data:
-        st.info("Noch keine Daten vorhanden.")
+        st.info("Keine Daten vorhanden.")
     else:
-        # Daten vorbereiten
         df = pd.DataFrame(raw_data)
         df.columns = df.columns.str.lower()
         
-        # --- METRIKEN BERECHNEN ---
+        # --- METRIKEN (KARTEN) ---
         if 'wert' in df.columns:
             total = df['wert'].sum()
             anzahl = len(df)
             last_date = str(df['created_at'].iloc[-1])[:10] if 'created_at' in df.columns else "-"
             
-            st.markdown("### Kennzahlen")
-            
-            # --- HIER SIND DIE NEUEN "ANGULAR CARDS" ---
+            # 3-Spalten Layout für die Karten
             m1, m2, m3 = st.columns(3)
             
-            # Karte 1: Gesamtsumme
-            with m1:
-                st.markdown(f"""
+            # Helper Funktion für sauberen HTML Code
+            def card_html(icon, title, value):
+                return f"""
                 <div class="css-card">
-                    <div class="card-icon">💰</div>
-                    <div class="card-title">Gesamtsumme</div>
-                    <div class="card-value">{total:,.0f} €</div>
+                    <div class="card-icon">{icon}</div>
+                    <div class="card-title">{title}</div>
+                    <div class="card-value">{value}</div>
                 </div>
-                """, unsafe_allow_html=True)
-                
-            # Karte 2: Anzahl
-            with m2:
-                st.markdown(f"""
-                <div class="css-card">
-                    <div class="card-icon">📦</div>
-                    <div class="card-title">Datensätze</div>
-                    <div class="card-value">{anzahl}</div>
-                </div>
-                """, unsafe_allow_html=True)
+                """
 
-            # Karte 3: Datum
+            with m1:
+                st.markdown(card_html("💶", "Gesamtvolumen", f"{total:,.0f} €"), unsafe_allow_html=True)
+            with m2:
+                st.markdown(card_html("📂", "Datensätze", anzahl), unsafe_allow_html=True)
             with m3:
-                st.markdown(f"""
-                <div class="css-card">
-                    <div class="card-icon">📅</div>
-                    <div class="card-title">Letztes Update</div>
-                    <div class="card-value">{last_date}</div>
-                </div>
-                """, unsafe_allow_html=True)
+                st.markdown(card_html("🕒", "Letztes Update", last_date), unsafe_allow_html=True)
             
-            # --- CHARTS ---
             st.markdown("---")
+
+            # --- CHARTS (Blau/Grau Palette) ---
             c1, c2 = st.columns(2)
             
+            # Wir definieren eine Blau-Grau Farbpalette für Plotly
+            # (Dunkelblau, Mittelblau, Grau, Hellblau, Sehr helles Grau)
+            custom_colors = ['#21618C', '#3498DB', '#85C1E9', '#BDC3C7', '#7F8C8D']
+            
             with c1:
-                st.subheader("Verteilung nach Kategorie")
+                st.subheader("Anteile nach Kategorie")
                 if 'kategorie' in df.columns:
-                    # Donut Chart sieht moderner aus
-                    fig_pie = px.pie(df, names='kategorie', values='wert', hole=0.5,
-                                     color_discrete_sequence=px.colors.sequential.RdBu)
-                    fig_pie.update_layout(showlegend=True, margin=dict(t=0, b=0, l=0, r=0))
+                    fig_pie = px.pie(df, names='kategorie', values='wert', hole=0.6,
+                                     color_discrete_sequence=custom_colors) # Unsere Farben
+                    fig_pie.update_traces(textinfo='percent+label')
                     st.plotly_chart(fig_pie, use_container_width=True)
             
             with c2:
-                st.subheader("Verlauf über Zeit")
+                st.subheader("Trendverlauf")
                 if 'created_at' in df.columns:
-                    fig_bar = px.bar(df, x='created_at', y='wert', color='kategorie')
-                    # Chart etwas aufräumen
-                    fig_bar.update_layout(xaxis_title="", yaxis_title="Wert (€)", showlegend=False)
+                    # Balkendiagramm in Blau
+                    fig_bar = px.bar(df, x='created_at', y='wert', color='kategorie',
+                                     color_discrete_sequence=custom_colors)
+                    fig_bar.update_layout(showlegend=False)
                     st.plotly_chart(fig_bar, use_container_width=True)
 
-        # --- DELETE BEREICH ---
+        # --- LÖSCHEN ---
         st.divider()
-        with st.expander("🗑️ Datensätze verwalten"):
+        with st.expander("🔧 Datenverwaltung"):
             if 'id' in df.columns:
                 options = [f"ID {row['id']} | {row['kategorie']} | {row['wert']}€" for index, row in df.iterrows()]
-                selected_option = st.selectbox("Eintrag wählen:", options)
+                selected_option = st.selectbox("Eintrag entfernen:", options)
                 
-                if st.button("Löschen 🚨", type="primary"):
+                if st.button("Löschen", type="primary"):
                     id_to_delete = selected_option.split(" |")[0].replace("ID ", "")
                     try:
                         delete_messwert(id_to_delete)
-                        st.success(f"ID {id_to_delete} gelöscht!")
-                        time.sleep(1)
+                        st.success("Gelöscht!")
+                        time.sleep(0.5)
                         st.rerun()
                     except Exception as e:
                         st.error(f"Fehler: {e}")
