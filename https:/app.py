@@ -12,6 +12,19 @@ from database import insert_bulk_projects, get_projects, insert_bulk_stats, get_
 
 st.set_page_config(page_title="CIO Cockpit 3.0", layout="wide", page_icon="🏢")
 
+# --- HELPER: DEUTSCHE ZAHLENFORMATIERUNG ---
+def fmt_de(value, decimals=0, suffix="€"):
+    """Wandelt 1234.56 in 1.234,56 um"""
+    if value is None: return ""
+    try:
+        # Erst englisch formatieren: 1,234.56
+        s = f"{value:,.{decimals}f}"
+        # Dann Zeichen tauschen
+        s = s.replace(",", "X").replace(".", ",").replace("X", ".")
+        return f"{s} {suffix}".strip()
+    except:
+        return str(value)
+
 # --- DESIGN & STYLE ---
 def local_css():
     st.markdown("""
@@ -99,11 +112,14 @@ if selected == "Management Dashboard":
             spend_per_fte = total_budget / fte if fte > 0 else 0
             it_revenue_ratio = (total_budget / revenue * 100) if revenue > 0 else 0
             
+            # KPI CARDS (Deutsche Formate)
+            delta_budget = (total_budget-prev_budget)/prev_budget*100
+            
             c1, c2, c3, c4 = st.columns(4)
-            with c1: kpi_func("Gesamt IT-Budget", f"{total_budget/1000000:,.1f} M€", f"{(total_budget-prev_budget)/prev_budget*100:+.1f}% vs Vj.", "grey")
-            with c2: kpi_func("Mitarbeiter (FTE)", f"{fte:,.0f}", "Köpfe", "grey")
-            with c3: kpi_func("IT-Kosten pro Kopf", f"{spend_per_fte:,.0f} €", "Ø Benchmark: 8.500 €", "#6c5ce7")
-            with c4: kpi_func("IT-Quote (v. Umsatz)", f"{it_revenue_ratio:.1f} %", "Ziel: < 5%", "green" if it_revenue_ratio < 5 else "orange")
+            with c1: kpi_func("Gesamt IT-Budget", f"{fmt_de(total_budget/1000000, 2, 'M€')}", f"{fmt_de(delta_budget, 1, '%')} vs Vj.", "grey")
+            with c2: kpi_func("Mitarbeiter (FTE)", f"{fmt_de(fte, 0, '')}", "Köpfe", "grey")
+            with c3: kpi_func("IT-Kosten pro Kopf", f"{fmt_de(spend_per_fte, 0, '€')}", "Ø Benchmark: 8.500 €", "#6c5ce7")
+            with c4: kpi_func("IT-Quote (v. Umsatz)", f"{fmt_de(it_revenue_ratio, 2, '%')}", "Ziel: < 5%", "green" if it_revenue_ratio < 5 else "orange")
             
             st.markdown("---")
             
@@ -121,21 +137,22 @@ if selected == "Management Dashboard":
                 fig.update_layout(
                     yaxis=dict(title="Budget in €"), 
                     yaxis2=dict(title="Anzahl FTE", overlaying='y', side='right'), 
-                    legend=dict(orientation="h", y=1.1)
+                    legend=dict(orientation="h", y=1.1),
+                    separators=",." # DEUTSCHE TRENNZEICHEN
                 )
                 st.plotly_chart(fig, use_container_width=True)
                 
             with col_chart2:
-                st.subheader("Verteilung: Invest (CAPEX) vs. Betrieb (OPEX)")
+                st.subheader("Split: Invest vs. Betrieb")
                 fig_pie = px.pie(df_p_curr, values='cost_planned', names='budget_type', 
                                    color='budget_type', 
                                    color_discrete_map={'CAPEX':'#00b894', 'OPEX':'#0984e3'}, hole=0.6)
-                fig_pie.update_layout(showlegend=True, margin=dict(t=0, b=0, l=0, r=0))
-                fig_pie.add_annotation(text=f"{opex/total_budget*100:.0f}%<br>OPEX", showarrow=False, font_size=20)
+                fig_pie.update_layout(showlegend=True, margin=dict(t=0, b=0, l=0, r=0), separators=",.")
+                fig_pie.add_annotation(text=f"{fmt_de(opex/total_budget*100, 0, '%')}<br>OPEX", showarrow=False, font_size=20)
                 st.plotly_chart(fig_pie, use_container_width=True)
 
 # ------------------------------------------------------------------
-# TAB 2: PLANUNG & SIMULATION 2026 (UPDATED TREIBERANALYSE)
+# TAB 2: PLANUNG & SIMULATION 2026
 # ------------------------------------------------------------------
 elif selected == "Planung & Simulation 2026":
     st.title("🔮 Szenario-Planer 2026")
@@ -143,7 +160,6 @@ elif selected == "Planung & Simulation 2026":
     if df_proj.empty:
         st.warning("Keine Datenbasis für Simulation vorhanden.")
     else:
-        # Basis 2025 laden
         df_base = df_proj[(df_proj['year'] == 2025) & (df_proj['scenario'] == 'Actual')].copy()
         stats_base = df_stats[(df_stats['year'] == 2025) & (df_stats['scenario'] == 'Actual')]
         
@@ -152,8 +168,6 @@ elif selected == "Planung & Simulation 2026":
 
         # --- REGLER ---
         st.markdown("### 1. Annahmen definieren")
-        st.info("Verändere die Parameter, um das Budget für 2026 zu simulieren.")
-        
         c_in1, c_in2, c_in3, c_in4 = st.columns(4)
         
         with c_in1:
@@ -178,7 +192,6 @@ elif selected == "Planung & Simulation 2026":
         def calculate_forecast(row):
             cost = row['cost_planned']
             opex_type = row.get('opex_type', '')
-            
             if opex_type == "Lizenzen (SaaS)" or opex_type == "Licenses (SaaS)":
                 return cost * (1 + sim_inflation) * (1 + sim_fte_growth)
             elif row['budget_type'] == 'OPEX':
@@ -200,57 +213,47 @@ elif selected == "Planung & Simulation 2026":
         sim_it_ratio = (sim_budget / new_rev * 100)
 
         k1, k2, k3, k4 = st.columns(4)
-        k1.metric("Budget 2026 (Prognose)", f"{sim_budget/1000000:,.2f} M€", f"{delta/1000000:+.2f} M€", delta_color="inverse")
-        k2.metric("Mitarbeiter 2026", f"{new_fte}", f"{new_fte - base_fte} Köpfe")
-        k3.metric("IT-Kosten / Kopf", f"{sim_spend_per_fte:,.0f} €", f"{sim_spend_per_fte - (base_budget/base_fte):+.0f} €", delta_color="inverse")
-        k4.metric("IT-Quote", f"{sim_it_ratio:.2f}%", f"{sim_it_ratio - (base_budget/base_rev*100):+.2f}%", delta_color="inverse")
+        k1.metric("Budget 2026 (Prognose)", f"{fmt_de(sim_budget/1000000, 2, 'M€')}", f"{fmt_de(delta/1000000, 2, 'M€')}", delta_color="inverse")
+        k2.metric("Mitarbeiter 2026", f"{fmt_de(new_fte, 0, '')}", f"{fmt_de(new_fte - base_fte, 0, 'Köpfe')}")
+        k3.metric("IT-Kosten / Kopf", f"{fmt_de(sim_spend_per_fte, 0, '€')}", f"{fmt_de(sim_spend_per_fte - (base_budget/base_fte), 0, '€')}", delta_color="inverse")
+        k4.metric("IT-Quote", f"{fmt_de(sim_it_ratio, 2, '%')}", f"{fmt_de(sim_it_ratio - (base_budget/base_rev*100), 2, '%')}", delta_color="inverse")
 
         st.markdown("")
         col_v1, col_v2 = st.columns([2, 1])
         
         with col_v1:
             st.subheader("Budget-Überleitung (Waterfall)")
-            
-            # --- VERBESSERTE TREIBER-ANALYSE (WATERFALL) ---
-            # Wir berechnen die Effekte präziser für die Grafik
-            
-            # 1. Preis-Effekt (Alles was durch Inflation steigt)
             effect_price = base_budget * sim_inflation
-            
-            # 2. Mengen-Effekt (Der Rest des Deltas ist Wachstum/Interaktion)
-            # Delta = (Sim - Base). Wir ziehen den Preis-Effekt ab, der Rest ist Menge.
             effect_volume = delta - effect_price
             
             fig_water = go.Figure(go.Waterfall(
-                name = "2026", 
-                orientation = "v",
+                name = "2026", orientation = "v",
                 measure = ["relative", "relative", "relative", "total"],
-                x = ["Budget 2025", "Preis-Effekte", "Mengen-Effekte (Wachstum)", "Budget 2026"],
+                x = ["Budget 2025", "Preis-Effekte", "Mengen-Effekte", "Budget 2026"],
                 textposition = "outside",
+                # Hier nutzen wir auch die deutsche Formatierung
                 text = [
-                    f"{base_budget/1000000:.1f} M€", 
-                    f"+{effect_price/1000000:.1f} M€", 
-                    f"+{effect_volume/1000000:.1f} M€", 
-                    f"{sim_budget/1000000:.1f} M€"
+                    f"{fmt_de(base_budget/1000000, 1, 'M€')}", 
+                    f"+{fmt_de(effect_price/1000000, 1, 'M€')}", 
+                    f"+{fmt_de(effect_volume/1000000, 1, 'M€')}", 
+                    f"{fmt_de(sim_budget/1000000, 1, 'M€')}"
                 ],
                 y = [base_budget, effect_price, effect_volume, sim_budget],
                 connector = {"line":{"color":"rgb(63, 63, 63)"}},
-                # Farbliche Gestaltung: Grau für Basis/Total, Rot für Kostensteigerung, Grün für Senkung
-                decreasing = {"marker":{"color":"#00b894"}}, # Grün (Falls wir sparen)
-                increasing = {"marker":{"color":"#d63031"}}, # Rot (Kosten steigen)
-                totals = {"marker":{"color":"#636e72"}}      # Grau (Ergebnis)
+                decreasing = {"marker":{"color":"#00b894"}},
+                increasing = {"marker":{"color":"#d63031"}},
+                totals = {"marker":{"color":"#636e72"}}
             ))
-            
-            fig_water.update_layout(
-                title="Kostentreiber Analyse",
-                waterfallgap = 0.3
-            )
+            fig_water.update_layout(title="Kostentreiber Analyse", waterfallgap = 0.3, separators=",.")
             st.plotly_chart(fig_water, use_container_width=True)
 
         with col_v2:
             st.subheader("Top Kostentreiber 2026")
             top_costs = df_sim.sort_values(by='cost_planned', ascending=False).head(5)
-            display_df = top_costs[['project_name', 'cost_planned']].rename(columns={'project_name': 'Projekt', 'cost_planned': 'Kosten (€)'})
+            # Kopie für Anzeige erstellen und formatieren
+            display_df = top_costs[['project_name', 'cost_planned']].copy()
+            display_df['cost_planned'] = display_df['cost_planned'].apply(lambda x: fmt_de(x, 2, '€'))
+            display_df = display_df.rename(columns={'project_name': 'Projekt', 'cost_planned': 'Kosten'})
             st.dataframe(display_df, hide_index=True)
 
 # ------------------------------------------------------------------
@@ -268,14 +271,16 @@ elif selected == "Kosten & OPEX Analyse":
         st.subheader(f"Drill-Down: Wohin fließt das Geld in {year_filter}?")
         df_yr['opex_type'] = df_yr['opex_type'].fillna("Investition")
         
-        # Sunburst Chart
         fig_sun = px.sunburst(df_yr, path=['budget_type', 'category', 'opex_type', 'project_name'], values='cost_planned',
                               color='category', color_discrete_sequence=px.colors.qualitative.Pastel)
-        fig_sun.update_layout(height=700)
+        fig_sun.update_layout(height=700, separators=",.")
         st.plotly_chart(fig_sun, use_container_width=True)
         
         st.markdown("### Top Einzelpositionen")
-        st.dataframe(df_yr.sort_values(by='cost_planned', ascending=False)[['project_name', 'category', 'cost_planned', 'status']].head(10))
+        top_list = df_yr.sort_values(by='cost_planned', ascending=False)[['project_name', 'category', 'cost_planned', 'status']].head(10)
+        # Tabelle schön formatieren
+        top_list['cost_planned'] = top_list['cost_planned'].apply(lambda x: fmt_de(x, 2, '€'))
+        st.dataframe(top_list)
 
 # ------------------------------------------------------------------
 # TAB 4: PORTFOLIO & RISIKO
@@ -298,17 +303,16 @@ elif selected == "Portfolio & Risiko":
                                  labels={"strategic_score": "Strategischer Wert (Business Impact)", "risk_factor": "Implementierungs-Risiko"},
                                  title=f"Projekt-Landschaft {current_year}")
             
-            # Quadranten
             fig_bub.add_hrect(y0=2.5, y1=5, line_width=0, fillcolor="red", opacity=0.1, annotation_text="Hohes Risiko")
             fig_bub.add_vrect(x0=5, x1=10, line_width=0, fillcolor="green", opacity=0.1, annotation_text="Hoher Wert")
-            fig_bub.update_layout(xaxis=dict(range=[0, 11]), yaxis=dict(range=[0, 6]))
+            fig_bub.update_layout(xaxis=dict(range=[0, 11]), yaxis=dict(range=[0, 6]), separators=",.")
             st.plotly_chart(fig_bub, use_container_width=True)
             
         with c2:
             st.markdown("### Top Strategische Wetten")
             top_strats = df_curr[df_curr['strategic_score'] >= 8].sort_values(by='strategic_score', ascending=False)
             for index, row in top_strats.head(5).iterrows():
-                st.info(f"**{row['project_name']}**\n\nScore: {row['strategic_score']}/10\n\nInvest: {row['cost_planned']/1000:.0f}k€")
+                st.info(f"**{row['project_name']}**\n\nScore: {row['strategic_score']}/10\n\nInvest: {fmt_de(row['cost_planned']/1000, 0, 'k€')}")
 
 # ------------------------------------------------------------------
 # TAB 5: DATEN GENERATOR
