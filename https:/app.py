@@ -10,7 +10,7 @@ import time
 # Imports aus database.py
 from database import insert_bulk_projects, get_projects, insert_bulk_stats, get_stats, delete_all_projects, delete_all_stats, insert_bulk_actuals, get_actuals, delete_all_actuals
 
-st.set_page_config(page_title="CIO Cockpit 15.0 - The Gauge is Back", layout="wide", page_icon="🏢")
+st.set_page_config(page_title="CIO Cockpit Final", layout="wide", page_icon="🏢")
 
 # --- HELPER ---
 def fmt_de(value, decimals=0, suffix="€"):
@@ -118,7 +118,7 @@ except Exception as e:
     df_proj, df_stats, df_act = pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
 
 # ------------------------------------------------------------------
-# TAB 1: DASHBOARD (JETZT MIT GAUGE CHART)
+# TAB 1: MANAGEMENT DASHBOARD
 # ------------------------------------------------------------------
 if selected == "Management Dashboard":
     st.title("🏛️ Management Dashboard (2026)")
@@ -143,7 +143,7 @@ if selected == "Management Dashboard":
         plan_total = df_plan['cost_planned'].sum()
         consumption = (actual_total / plan_total * 100) if plan_total > 0 else 0
         
-        # STATS 2025
+        # FTE aus 2025
         if not df_stats.empty:
             stats_curr = df_stats[df_stats['year'] == 2025]
             fte = stats_curr.iloc[0]['fte_count'] if not stats_curr.empty else 0
@@ -160,11 +160,9 @@ if selected == "Management Dashboard":
         
         col_main, col_side = st.columns([2, 1])
         with col_main:
-            st.subheader("Plan vs. Ist (Pro Kategorie)")
-            
+            st.subheader("Plan vs. Ist (Kategorie)")
             pg = df_plan.groupby('category')['cost_planned'].sum().reset_index()
             pg['Type'] = 'Plan'; pg.rename(columns={'cost_planned':'Value'}, inplace=True)
-            
             if not df_act_2026.empty:
                 m = pd.merge(df_act_2026, df_proj[['id', 'category']], left_on='project_id', right_on='id', how='left')
                 ag = m.groupby('category')['cost_actual'].sum().reset_index()
@@ -179,32 +177,22 @@ if selected == "Management Dashboard":
             
         with col_side:
             st.subheader("Budget Auslastung")
-            
-            # --- HIER IST DIE GAUGE CHART WIEDER! ---
             max_val = plan_total if plan_total > 0 else 100
-            
             fig_gauge = go.Figure(go.Indicator(
                 mode = "gauge+number",
                 value = actual_total,
                 domain = {'x': [0, 1], 'y': [0, 1]},
                 title = {'text': "Ist vs. Plan", 'font': {'size': 20, 'color': text_color}},
-                number = {'font': {'color': text_color}},
                 gauge = {
                     'axis': {'range': [None, max_val], 'tickwidth': 1, 'tickcolor': text_color},
                     'bar': {'color': "#6c5ce7"},
                     'bgcolor': "rgba(0,0,0,0)",
-                    'borderwidth': 2,
-                    'bordercolor': "gray",
                     'steps': [
-                        {'range': [0, max_val*0.75], 'color': "rgba(0, 184, 148, 0.3)"},  # Grün
-                        {'range': [max_val*0.75, max_val*0.95], 'color': "rgba(253, 203, 110, 0.3)"}, # Gelb
-                        {'range': [max_val*0.95, max_val*1.5], 'color': "rgba(214, 48, 49, 0.3)"} # Rot
+                        {'range': [0, max_val*0.75], 'color': "rgba(0, 184, 148, 0.3)"},
+                        {'range': [max_val*0.75, max_val*0.95], 'color': "rgba(253, 203, 110, 0.3)"},
+                        {'range': [max_val*0.95, max_val*1.5], 'color': "rgba(214, 48, 49, 0.3)"}
                     ],
-                    'threshold': {
-                        'line': {'color': "red", 'width': 4},
-                        'thickness': 0.75,
-                        'value': max_val
-                    }
+                    'threshold': {'line': {'color': "red", 'width': 4}, 'thickness': 0.75, 'value': max_val}
                 }
             ))
             fig_gauge.update_layout(height=350, margin=dict(t=30,b=10,l=10,r=10), paper_bgcolor='rgba(0,0,0,0)', font={'color': text_color})
@@ -242,8 +230,7 @@ elif selected == "1. Basis-Budget (OPEX)":
                 d['year'] = 2026; d['scenario'] = fixed_scen; d['status'] = 'Planned Base'
                 if 'id' in d: del d['id']
                 if 'created_at' in d: del d['created_at']
-                insert_bulk_projects(d.to_dict('records'))
-                st.rerun()
+                insert_bulk_projects(d.to_dict('records')); st.rerun()
 
             with c1:
                 st.markdown(f'<div class="css-card"><h4>Flat</h4><h3>{fmt_de(val_25,0)}</h3></div>', unsafe_allow_html=True)
@@ -261,84 +248,106 @@ elif selected == "1. Basis-Budget (OPEX)":
                 if st.button("Wähle Manuell"): save_opex(1 + manual_pct/100, "Manual")
 
 # ------------------------------------------------------------------
-# TAB 3: PROJEKT WIZARD
+# TAB 3: PROJEKT WIZARD (3 SCHRITTE)
 # ------------------------------------------------------------------
 elif selected == "2. Projekt-Planung":
     st.title("🚀 Schritt 2: Neue Projekte")
-    step = st.session_state.wizard_step
-    st.progress(step/3)
+    st.info("Füge Investitionen oder neue Themen hinzu.")
     
+    step = st.session_state.wizard_step
+    
+    # Fortschrittsanzeige
+    col_s1, col_s2, col_s3 = st.columns(3)
+    col_s1.markdown(f"**1. Stammdaten** {'✅' if step > 1 else '🔵'}")
+    col_s2.markdown(f"**2. Finanzen** {'✅' if step > 2 else '🔵'}")
+    col_s3.markdown(f"**3. Strategie** {'✅' if step > 3 else '🔵'}")
+    st.progress(step/3)
+    st.divider()
+    
+    # SCHRITT 1
     if step == 1:
         with st.form("s1"):
-            st.subheader("Stammdaten")
+            st.subheader("1. Stammdaten")
             n = st.text_input("Projektname", value=st.session_state.wiz_data.get('project_name',''))
             c = st.selectbox("Kategorie", ["Cloud", "Workplace", "ERP", "Security", "Infra"])
-            if st.form_submit_button("Weiter"):
-                if n: st.session_state.wiz_data.update({'project_name':n, 'category':c, 'year':2026}); st.session_state.wizard_step=2; st.rerun()
+            if st.form_submit_button("Weiter ➡️"):
+                if n: 
+                    st.session_state.wiz_data.update({'project_name':n, 'category':c, 'year':2026})
+                    st.session_state.wizard_step=2; st.rerun()
+                else: st.error("Name fehlt")
+
+    # SCHRITT 2
     elif step == 2:
         with st.form("s2"):
-            st.subheader("Finanzen")
-            t = st.radio("Typ", ["CAPEX", "OPEX"])
-            o_type = st.selectbox("Art", ["-", "Lizenzen (SaaS)", "Cloud Infra", "Beratung"])
-            cost = st.number_input("Betrag (€)", value=10000.0, step=1000.0)
-            if st.form_submit_button("Weiter"):
+            st.subheader("2. Finanzen")
+            c1, c2 = st.columns(2)
+            with c1: t = st.radio("Typ", ["CAPEX", "OPEX"])
+            with c2: o_type = st.selectbox("Art (bei OPEX)", ["-", "Lizenzen (SaaS)", "Cloud Infra", "Beratung"])
+            cost = st.number_input("Kosten (€)", value=10000.0, step=1000.0)
+            
+            c_b1, c_b2 = st.columns(2)
+            if c_b1.form_submit_button("⬅️ Zurück"):
+                st.session_state.wizard_step = 1; st.rerun()
+            if c_b2.form_submit_button("Weiter ➡️"):
                 st.session_state.wiz_data.update({'budget_type':t, 'cost_planned':cost, 'opex_type': o_type if t=="OPEX" else ""})
                 st.session_state.wizard_step=3; st.rerun()
+
+    # SCHRITT 3
     elif step == 3:
         with st.form("s3"):
-            st.subheader("Strategie")
-            r = st.slider("Risiko", 1,5,2); s = st.slider("Wert", 1,10,5)
-            if st.form_submit_button("Speichern"):
+            st.subheader("3. Strategie")
+            r = st.slider("Risiko", 1,5,2)
+            s = st.slider("Wert", 1,10,5)
+            
+            c_b1, c_b2 = st.columns(2)
+            if c_b1.form_submit_button("⬅️ Zurück"):
+                st.session_state.wizard_step = 2; st.rerun()
+            if c_b2.form_submit_button("💾 Speichern", type="primary"):
                 d = st.session_state.wiz_data.copy()
                 d.update({'risk_factor':r, 'strategic_score':s, 'scenario':'Planned Project', 'status':'Planned'})
-                insert_bulk_projects([d]); st.success("Gespeichert!"); st.session_state.wiz_data={}; st.session_state.wizard_step=1; time.sleep(1); st.rerun()
+                insert_bulk_projects([d])
+                st.success("Gespeichert!")
+                st.session_state.wiz_data={}; st.session_state.wizard_step=1; time.sleep(1); st.rerun()
 
 # ------------------------------------------------------------------
 # TAB 4: SZENARIO SIMULATOR
 # ------------------------------------------------------------------
 elif selected == "Szenario-Simulator":
     st.title("🔮 Tiefen-Simulation 2026")
-    
     if df_proj.empty: st.warning("Keine Daten.")
     else:
         basis_2026 = df_proj[(df_proj['year']==2026) & (df_proj['scenario'].isin(['Budget 2026 (Fixed)', 'Planned Project']))].copy()
-        
         if basis_2026.empty:
-            st.info("Noch kein Plan für 2026. Simuliere auf Basis 2025 Ist.")
+            st.info("Simuliere auf Basis 2025 Ist.")
             basis_2026 = df_proj[(df_proj['year']==2025) & (df_proj['scenario']=='Actual')].copy()
             basis_2026['year'] = 2026
 
         base_val = basis_2026['cost_planned'].sum()
         st.markdown(f"**Basis-Volumen:** {fmt_de(base_val)}")
         
-        st.subheader("Simulationstreiber")
         c1, c2, c3 = st.columns(3)
-        sim_inf = c1.slider("Allgemeine Inflation", 0.0, 10.0, 3.0, format="%f%%") / 100
-        sim_fte = c2.slider("Mitarbeiter-Wachstum (FTE)", -10.0, 30.0, 5.0, format="%f%%") / 100
-        sim_eff = c3.slider("Effizienz-Ziel (Savings)", 0.0, 10.0, 2.0, format="%f%%") / 100
+        sim_inf = c1.slider("Inflation", 0.0, 10.0, 3.0)/100
+        sim_fte = c2.slider("Mitarbeiter-Wachstum", -10.0, 30.0, 5.0)/100
+        sim_eff = c3.slider("Effizienz-Ziel", 0.0, 10.0, 2.0)/100
         
         df_sim = basis_2026.copy()
         def smart_calc(row):
             cost = row['cost_planned']
             cat = str(row.get('category', ''))
             otype = str(row.get('opex_type', ''))
-            if "Lizenzen" in otype or "Workplace" in cat or "Arbeitsplatz" in cat:
-                return cost * (1 + sim_inf) * (1 + sim_fte)
-            else:
-                return cost * (1 + sim_inf)
+            if "Lizenzen" in otype or "Workplace" in cat: return cost * (1 + sim_inf) * (1 + sim_fte)
+            else: return cost * (1 + sim_inf)
 
-        df_sim['cost_planned'] = df_sim.apply(smart_calc, axis=1)
-        df_sim['cost_planned'] = df_sim['cost_planned'] * (1 - sim_eff)
-        
+        df_sim['cost_planned'] = df_sim.apply(smart_calc, axis=1) * (1 - sim_eff)
         sim_val = df_sim['cost_planned'].sum()
+        
         st.divider()
         c_r1, c_r2 = st.columns(2)
         c_r1.metric("Simuliertes Budget", fmt_de(sim_val), delta=fmt_de(sim_val - base_val), delta_color="inverse")
-        
         with c_r2:
             with st.form("save_sim"):
                 n = st.text_input("Szenario Name", value=f"Sim FTE+{int(sim_fte*100)}%")
-                if st.form_submit_button("Szenario Speichern"):
+                if st.form_submit_button("Speichern"):
                     df_sim['scenario'] = n
                     if 'id' in df_sim: del df_sim['id']
                     if 'created_at' in df_sim: del df_sim['created_at']
@@ -369,9 +378,6 @@ elif selected == "Szenario-Vergleich":
                 g1 = top.groupby(['budget_type', 'category'])['cost_planned'].sum().reset_index()
                 for _,r in g1.iterrows(): src.append(idx(r['budget_type'])); tgt.append(idx(r['category'])); val.append(r['cost_planned'])
                 for _,r in top.iterrows(): src.append(idx(r['category'])); tgt.append(idx(r['project_name'])); val.append(r['cost_planned'])
-                
-                
-
                 cols = ["#6c5ce7"]*10 + ["#00b894"]*10 + ["#a29bfe"]*20
                 fig_s = go.Figure(data=[go.Sankey(node=dict(label=lbl, color=cols, pad=20, thickness=20, line=dict(color="black", width=0.5)),
                                                   link=dict(source=src, target=tgt, value=val, color="rgba(100,100,100,0.3)"))])
@@ -398,34 +404,28 @@ elif selected == "Portfolio & Risiko":
             st.plotly_chart(fig, use_container_width=True)
 
 # ------------------------------------------------------------------
-# TAB 8: DATEN MANAGER (MIT FTE LOGIK)
+# TAB 8: DATEN MANAGER
 # ------------------------------------------------------------------
 elif selected == "Daten-Manager":
     st.title("💾 Daten Management")
-    t1, t2, t3, t4 = st.tabs(["🎲 Historie (22-25)", "📅 Ist-Werte 26", "📂 CSV Import", "⚠️ Reset"])
+    t1, t2, t3 = st.tabs(["🎲 Historie (22-25)", "📅 Ist-Werte 26", "⚠️ Reset"])
     
     with t1:
         st.markdown("**Erzeugt Projekte UND Mitarbeiterzahlen (2022-2025)**")
         if st.button("🚀 Historie generieren"):
             delete_all_projects(); delete_all_stats(); delete_all_actuals()
-            
-            stats_list = []
-            projs_list = []
-            years = [2022, 2023, 2024, 2025]
-            
-            for y in years:
+            stats_list, projs_list = [], []
+            for y in [2022, 2023, 2024, 2025]:
                 fte = int(500 * (1.05**(y-2022)))
                 rev = 80000000 * (1.07**(y-2022))
                 stats_list.append({"year": y, "fte_count": fte, "revenue": rev, "scenario": "Actual"})
-                
                 projs_list.append({"project_name": "M365 Lizenzen", "category": "Digitaler Arbeitsplatz", "budget_type": "OPEX", "opex_type": "Lizenzen", "year": y, "cost_planned": fte*1200, "scenario": "Actual", "status": "Live"})
                 projs_list.append({"project_name": "Rechenzentrum", "category": "Infrastruktur", "budget_type": "OPEX", "opex_type": "Cloud", "year": y, "cost_planned": 300000, "scenario": "Actual", "status": "Live"})
                 for i in range(4):
                     projs_list.append({"project_name": f"Projekt {y}-{i}", "category": random.choice(["Cloud","Security"]), "budget_type": "CAPEX", "year": y, "cost_planned": random.randint(50000, 200000), "scenario": "Actual", "status": "Closed"})
-            
-            insert_bulk_stats(stats_list) 
+            insert_bulk_stats(stats_list)
             insert_bulk_projects(projs_list)
-            st.success("Historie inkl. Mitarbeiterzahlen erstellt!"); time.sleep(1); st.rerun()
+            st.success("Erledigt!"); time.sleep(1); st.rerun()
             
     with t2:
         m = st.selectbox("Monat", range(1,13))
@@ -434,11 +434,8 @@ elif selected == "Daten-Manager":
             if pl.empty: st.error("Kein Plan 2026.")
             else:
                 a = []
-                for _,r in pl.iterrows():
-                    a.append({"project_id": r['id'], "year": 2026, "month": m, "cost_actual": (r['cost_planned']/12)*random.uniform(0.9,1.1)})
-                insert_bulk_actuals(a)
-                st.success("Gebucht!"); time.sleep(1); st.rerun()
+                for _,r in pl.iterrows(): a.append({"project_id": r['id'], "year": 2026, "month": m, "cost_actual": (r['cost_planned']/12)*random.uniform(0.9,1.1)})
+                insert_bulk_actuals(a); st.success("Gebucht!"); time.sleep(1); st.rerun()
 
-    with t3: st.write("CSV Import möglich.")
-    with t4:
+    with t3:
         if st.button("Alles löschen"): delete_all_projects(); delete_all_stats(); delete_all_actuals(); st.rerun()
