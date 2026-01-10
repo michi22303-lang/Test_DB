@@ -30,3 +30,11 @@ def get_all_messwerte():
     # Auch hier den richtigen Tabellennamen nutzen
     response = supabase.table("Michis Test").select("*").execute()
     return response.data
+
+# --- Funktion 3: LÖSCHEN ---
+def delete_messwert(id):
+    """Löscht einen Eintrag anhand seiner ID."""
+    supabase = init_connection()
+    # Wir sagen: Lösche aus Tabelle "Michis Test", wo die Spalte "id" gleich dem übergebenen Wert ist.
+    response = supabase.table("Michis Test").delete().eq("id", id).execute()
+    return response
