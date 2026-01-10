@@ -1,21 +1,32 @@
 import streamlit as st
 from supabase import create_client, Client
 
-# Wir holen die Zugangsdaten sicher aus den Streamlit Secrets (nicht hardcoden!)
-url = st.secrets["SUPABASE_URL"]
-key = st.secrets["SUPABASE_KEY"]
-
+# Verbindung aufbauen (nutzt den Cache, damit es schnell bleibt)
+@st.cache_resource
 def init_connection():
+    url = st.secrets["SUPABASE_URL"]
+    key = st.secrets["SUPABASE_KEY"]
     return create_client(url, key)
 
-def save_data(table_name, data_dict):
-    """Speichert ein Dictionary in der Datenbank"""
+# Funktion 1: Daten speichern
+def insert_messwert(kategorie, wert, kommentar):
     supabase = init_connection()
-    data = supabase.table(table_name).insert(data_dict).execute()
-    return data
+    # Hier bauen wir das Dictionary für deine Spalten
+    # Deine Spalte heißt "wert", also muss der Key hier auch "wert" heißen!
+    data = {
+        "kategorie": kategorie, 
+        "wert": wert,          # Deine Spalte in Supabase
+        "kommentar": kommentar
+    }
+    
+    # ACHTUNG: Tabellenname muss exakt stimmen. 
+    # Bei "Michis Test" muss er in Anführungszeichen stehen.
+    response = supabase.table("Michis Test").insert(data).execute()
+    return response
 
-def load_data(table_name):
-    """Lädt alle Daten aus einer Tabelle"""
+# Funktion 2: Daten laden
+def get_all_messwerte():
     supabase = init_connection()
-    response = supabase.table(table_name).select("*").execute()
+    # Auch hier den richtigen Tabellennamen nutzen
+    response = supabase.table("Michis Test").select("*").execute()
     return response.data
