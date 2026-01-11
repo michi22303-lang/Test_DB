@@ -467,19 +467,37 @@ elif selected == "Administration":
     with t4:
         st.subheader("Projekt-Kategorien verwalten")
         
-        # 1. Neue Kategorie anlegen
-        with st.form("new_category_form", clear_on_submit=True):
-            new_cat_name = st.text_input("Neue Kategorie Name:")
-            submitted = st.form_submit_button("Hinzufügen")
-            if submitted and new_cat_name:
-                # Diese Funktion muss in database.py existieren (siehe Schritt 2)
-                insert_category(new_cat_name) 
-                st.success(f"Kategorie '{new_cat_name}' gespeichert.")
-                time.sleep(0.5)
-                st.rerun()
-        
+        # ... (Formular Code lassen Sie wie er ist) ...
+
         st.divider()
-        st.write("**Aktuelle Kategorien:**")
+        
+        categories = get_categories() 
+        
+        # DEBUG-HILFE (Falls es immer noch abstürzt, sehen Sie hier warum)
+        # st.write("Debug Typ:", type(categories)) 
+        # st.write("Debug Inhalt:", categories)
+
+        if categories:
+            # 🔧 SICHERHEITS-CHECK:
+            # Falls 'categories' versehentlich ein einzelnes Dict ist, machen wir eine Liste draus.
+            if isinstance(categories, dict):
+                categories = [categories]
+            
+            for cat in categories:
+                c1, c2 = st.columns([0.8, 0.2])
+                
+                # Hier holen wir den Namen sicher
+                # Wir prüfen, ob 'name' existiert, sonst Platzhalter
+                val_name = cat.get('name', 'Unbekannt')
+                val_id = cat.get('id')
+                
+                c1.text(val_name)
+                
+                if val_id and c2.button("🗑️", key=f"del_cat_{val_id}"):
+                    delete_category(val_id)
+                    st.rerun()
+        else:
+            st.info("Keine Kategorien gefunden.")
         
         # 2. Liste anzeigen & Löschen
         # Diese Funktion muss in database.py existieren (siehe Schritt 2)
