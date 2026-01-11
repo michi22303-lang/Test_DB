@@ -8,7 +8,18 @@ import random
 import time
 
 # Imports aus database.py
-from database import insert_bulk_projects, get_projects, insert_bulk_stats, get_stats, delete_all_projects, delete_all_stats, insert_bulk_actuals, get_actuals, delete_all_actuals, get_categories
+from database import (
+    insert_bulk_projects, 
+    get_projects, 
+    insert_bulk_stats, 
+    insert_bulk_actuals,
+    delete_all_projects,
+    delete_all_stats,
+    delete_all_actuals,
+    get_categories,
+    insert_category,
+    delete_category
+)
 
 st.set_page_config(page_title="CIO Cockpit Final", layout="wide", page_icon="🏢")
 
