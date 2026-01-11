@@ -68,6 +68,11 @@ def delete_category(cat_id):
     supabase = init_connection()
     supabase.table('project_categories').delete().eq('id', cat_id).execute()
 
+def get_actuals():
+    """Holt die Ist-Kosten (Actuals)"""
+    supabase = init_connection()
+    response = supabase.table('project_actuals').select('*').execute()
+    return response.data
 
 
 @st.cache_data(ttl=600)
