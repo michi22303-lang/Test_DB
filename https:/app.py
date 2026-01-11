@@ -11,7 +11,8 @@ import time
 from database import (
     insert_bulk_projects, 
     get_projects, 
-    insert_bulk_stats, 
+    insert_bulk_stats,
+    get_stats,
     insert_bulk_actuals,
     delete_all_projects,
     delete_all_stats,
