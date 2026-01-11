@@ -59,3 +59,16 @@ def get_categories():
     category_list.sort()
         
     return category_list
+
+def get_categories():
+    """Holt alle Einträge aus project_categories"""
+    response = supabase.table('project_categories').select('*').order('name').execute()
+    return response.data
+
+def insert_category(name_text):
+    """Fügt eine neue Kategorie hinzu"""
+    supabase.table('project_categories').insert({"name": name_text}).execute()
+
+def delete_category(cat_id):
+    """Löscht eine Kategorie anhand der ID"""
+    supabase.table('project_categories').delete().eq('id', cat_id).execute()
