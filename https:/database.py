@@ -45,3 +45,17 @@ def get_actuals():
 def delete_all_actuals():
     supabase = init_connection()
     return supabase.table("project_actuals").delete().neq("id", 0).execute()
+
+@st.cache_data(ttl=600)
+def get_categories():
+    """Holt die Kategorien aus der Tabelle 'project_categories'"""
+    try:
+        # Hier greifen wir auf das 'supabase' Objekt zu, das in dieser Datei lebt
+        response = supabase.table('project_categories').select('name').execute()
+        
+        # Daten extrahieren und flache Liste erstellen
+        data = response.data
+        category_list = [item['name'] for item in data]
+        category_list.sort()
+        
+        return category_list
