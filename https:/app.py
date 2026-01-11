@@ -266,27 +266,34 @@ elif selected == "2. Projekt-Planung":
     
     # ... (Vorheriger Code) ...
 
+# ----------------------------------------------------
     # SCHRITT 1
-if step == 1:
-    with st.form("s1"):
-        st.subheader("1. Stammdaten")
-        
-        # JETZT funktioniert der Aufruf, da er importiert wurde
-        cat_options = get_categories() 
+    # ----------------------------------------------------
+    if step == 1:  # <--- Achte darauf, dass dies bündig mit 'elif step == 2' ist
+        with st.form("s1"):
+            st.subheader("1. Stammdaten")
+            
+            # Funktionsaufruf (Import muss in app.py vorhanden sein!)
+            cat_options = get_categories() 
 
-        n = st.text_input("Projektname", value=st.session_state.wiz_data.get('project_name',''))
-        
-        # Variable in Selectbox nutzen
-        c = st.selectbox("Kategorie", cat_options)
-        
-        if st.form_submit_button("Weiter ➡️"):
-            if n: 
-                st.session_state.wiz_data.update({'project_name':n, 'category':c, 'year':2026})
-                st.session_state.wizard_step=2; st.rerun()
-            else: st.error("Name fehlt")
+            n = st.text_input("Projektname", value=st.session_state.wiz_data.get('project_name',''))
+            
+            # Selectbox mit Daten aus DB
+            c = st.selectbox("Kategorie", cat_options)
+            
+            # Form Button Logik
+            if st.form_submit_button("Weiter ➡️"):
+                if n: 
+                    st.session_state.wiz_data.update({'project_name':n, 'category':c, 'year':2026})
+                    st.session_state.wizard_step = 2
+                    st.rerun()
+                else: 
+                    st.error("Name fehlt")
 
+    # ----------------------------------------------------
     # SCHRITT 2
-    elif step == 2:
+    # ----------------------------------------------------
+    elif step == 2: # <--- Dies verursachte den Fehler
         with st.form("s2"):
             st.subheader("2. Finanzen")
             c1, c2 = st.columns(2)
