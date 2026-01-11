@@ -8,7 +8,7 @@ import random
 import time
 
 # Imports aus database.py
-from database import insert_bulk_projects, get_projects, insert_bulk_stats, get_stats, delete_all_projects, delete_all_stats, insert_bulk_actuals, get_actuals, delete_all_actuals
+from database import insert_bulk_projects, get_projects, insert_bulk_stats, get_stats, delete_all_projects, delete_all_stats, insert_bulk_actuals, get_actuals, delete_all_actuals, get_categories
 
 st.set_page_config(page_title="CIO Cockpit Final", layout="wide", page_icon="🏢")
 
@@ -267,25 +267,23 @@ elif selected == "2. Projekt-Planung":
     # ... (Vorheriger Code) ...
 
     # SCHRITT 1
-    if step == 1:
-        with st.form("s1"):
-            st.subheader("1. Stammdaten")
-            
-            # --- DATENBANK ABFRAGE ---
-            # Hier rufen wir die Funktion auf
-            db_categories = get_categories_from_supabase()
-            # -------------------------
+if step == 1:
+    with st.form("s1"):
+        st.subheader("1. Stammdaten")
+        
+        # JETZT funktioniert der Aufruf, da er importiert wurde
+        cat_options = get_categories() 
 
-            n = st.text_input("Projektname", value=st.session_state.wiz_data.get('project_name',''))
-            
-            # Die Variable db_categories kommt jetzt in die Selectbox
-            c = st.selectbox("Kategorie", db_categories)
-            
-            if st.form_submit_button("Weiter ➡️"):
-                if n: 
-                    st.session_state.wiz_data.update({'project_name':n, 'category':c, 'year':2026})
-                    st.session_state.wizard_step=2; st.rerun()
-                else: st.error("Name fehlt")
+        n = st.text_input("Projektname", value=st.session_state.wiz_data.get('project_name',''))
+        
+        # Variable in Selectbox nutzen
+        c = st.selectbox("Kategorie", cat_options)
+        
+        if st.form_submit_button("Weiter ➡️"):
+            if n: 
+                st.session_state.wiz_data.update({'project_name':n, 'category':c, 'year':2026})
+                st.session_state.wizard_step=2; st.rerun()
+            else: st.error("Name fehlt")
 
     # SCHRITT 2
     elif step == 2:
