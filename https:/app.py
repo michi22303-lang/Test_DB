@@ -55,7 +55,7 @@ with st.sidebar:
             "Szenario-Vergleich", 
             "Kosten & OPEX Analyse", 
             "Portfolio & Risiko", 
-            "Daten-Manager"
+            "Administration"
         ],
         icons=["speedometer2", "bank", "pencil-square", "calculator", "diagram-3", "pie-chart", "bullseye", "database-gear"],
         default_index=0,
