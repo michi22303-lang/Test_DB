@@ -49,6 +49,7 @@ def delete_all_actuals():
 def get_categories():
     # Holt alle Kategorien. 
     # WICHTIG: Kein .single() verwenden, sonst kommt kein List-Objekt zurück!
+    supabase = init_connection()
     response = supabase.table('project_categories').select('*').order('name').execute()
     
     # Sicherstellen, dass wir eine Liste zurückgeben, auch wenn es leer ist
