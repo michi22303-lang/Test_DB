@@ -47,14 +47,16 @@ def delete_all_actuals():
     return supabase.table("project_actuals").delete().neq("id", 0).execute()
 
 def get_categories():
-    supabase = init_connection() # Nur 1x aufrufen
-    # WICHTIG: select('*') benutzen, nicht select('name')
+    supabase = init_connection()
+    # Wir brauchen ALLES (*) -> ID und Name
     response = supabase.table('project_categories').select('*').order('name').execute()
     
+    # Wir geben die ROHDATEN zurück (Liste von Dictionaries)
     data = response.data
-    if data is None:
+    if data is None: 
         return []
     return data
+
 
 def insert_category(name_text):
     """Fügt eine neue Kategorie hinzu"""
