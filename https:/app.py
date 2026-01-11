@@ -28,7 +28,8 @@ from database import (
     delete_all_actuals,
     get_categories,         # Für Tab 4
     insert_category,        # Für Tab 4
-    delete_category         # Für Tab 4
+    delete_category,         # Für Tab 4
+    update_category
 )
 
 st.set_page_config(page_title="CIO Cockpit Final", layout="wide", page_icon="🏢")
@@ -542,27 +543,50 @@ elif selected == "Administration":
         # -----------------------------------------------------
 
         if raw_cats:
-            # Falls nur ein einzelnes Dict kommt (Supabase Eigenheit), Liste draus machen
+            # Falls nur ein einzelnes Dict kommt, Liste draus machen
             if isinstance(raw_cats, dict):
                 raw_cats = [raw_cats]
             
             # Liste durchgehen
             for cat in raw_cats:
-                # Layout: Name links, Löschen-Button rechts
-                c1, c2 = st.columns([0.85, 0.15])
                 
-                # Fall A: Daten sind korrekt (Dictionary mit id und name)
+                # --- NUR WENN DATEN KORREKT SIND (Dict) ---
                 if isinstance(cat, dict):
-                    c1.text(f"🔹 {cat.get('name', 'Ohne Name')}")
+                    # NEUES LAYOUT: 3 Spalten (Name ca. 70%, Edit 15%, Delete 15%)
+                    c1, c2, c3 = st.columns([0.7, 0.15, 0.15])
+                    
+                    # Infos holen
+                    cat_name = cat.get('name', 'Ohne Name')
                     cat_id = cat.get('id')
+                    
+                    # 1. Spalte: Name anzeigen
+                    c1.text(f"🔹 {cat_name}")
+                    
                     if cat_id:
-                        if c2.button("🗑️", key=f"del_{cat_id}"):
+                        # 2. Spalte: Editieren (Popover Menü)
+                        # Das ist der neue Teil!
+                        with c2.popover("✏️", help="Umbenennen"):
+                            st.write(f"**Bearbeiten:**")
+                            # Eingabefeld vorbefüllt mit dem aktuellen Namen
+                            new_name = st.text_input("Name ändern", value=cat_name, key=f"edit_{cat_id}")
+                            
+                            # Speicher-Button im Popover
+                            if st.button("💾 Speichern", key=f"save_{cat_id}"):
+                                if new_name and new_name != cat_name:
+                                    # Hier wird die neue Update-Funktion aufgerufen
+                                    update_category(cat_id, new_name)
+                                    st.success("Gespeichert!")
+                                    time.sleep(0.5)
+                                    st.rerun()
+
+                        # 3. Spalte: Löschen (Ihr alter Code, verschoben nach c3)
+                        if c3.button("🗑️", key=f"del_{cat_id}", help="Löschen"):
                             delete_category(cat_id)
                             st.rerun()
                 
-                # Fall B: Daten sind kaputt (nur Strings wie "Cloud") -> Nur anzeigen, nicht löschbar
+                # --- FALL B: FEHLERHAFTE DATEN (Nur zur Sicherheit drin lassen) ---
                 elif isinstance(cat, str):
-                    c1.warning(f"⚠️ Altes Datenformat: {cat}")
-                    c2.write("-")
+                    st.warning(f"⚠️ Altes Datenformat ignoriert: {cat}")
+
         else:
             st.info("Keine Kategorien vorhanden.")
