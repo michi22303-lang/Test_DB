@@ -486,6 +486,16 @@ elif selected == "Administration":
     with t4:
         st.subheader("Projekt-Kategorien verwalten")
         
+        # ... (Formular Code) ...
+        
+        categories = get_categories() 
+        
+        # --- DIAGNOSE START ---
+        st.write("🔍 WAS KOMMT AUS DER DB?", categories)
+        # --- DIAGNOSE ENDE ---
+
+        if categories:
+        
         # 1. Formular zum Anlegen
         with st.form("new_category_form", clear_on_submit=True):
             new_cat_name = st.text_input("Neue Kategorie Name:")
