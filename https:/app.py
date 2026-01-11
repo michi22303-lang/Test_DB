@@ -7,6 +7,12 @@ import numpy as np
 import random
 import time
 
+# Nur für kurzzeitiges Debuggen einfügen:
+if st.sidebar.button("🧹 Cache leeren"):
+    st.cache_data.clear()
+    st.cache_resource.clear()
+    st.rerun()
+
 # Imports aus database.py
 from database import (
     insert_bulk_projects, 
