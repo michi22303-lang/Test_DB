@@ -50,12 +50,12 @@ def delete_all_actuals():
 def get_categories():
     """Holt die Kategorien aus der Tabelle 'project_categories'"""
 
-        # Hier greifen wir auf das 'supabase' Objekt zu, das in dieser Datei lebt
-        response = supabase.table('project_categories').select('name').execute()
+    # Hier greifen wir auf das 'supabase' Objekt zu, das in dieser Datei lebt
+    response = supabase.table('project_categories').select('name').execute()
         
-        # Daten extrahieren und flache Liste erstellen
-        data = response.data
-        category_list = [item['name'] for item in data]
-        category_list.sort()
+    # Daten extrahieren und flache Liste erstellen
+    data = response.data
+    category_list = [item['name'] for item in data]
+    category_list.sort()
         
-        return category_list
+    return category_list
