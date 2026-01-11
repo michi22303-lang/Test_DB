@@ -47,10 +47,16 @@ def delete_all_actuals():
     return supabase.table("project_actuals").delete().neq("id", 0).execute()
 
 def get_categories():
-    """Holt alle Einträge aus project_categories"""
-    supabase = init_connection()
+    # Holt alle Kategorien. 
+    # WICHTIG: Kein .single() verwenden, sonst kommt kein List-Objekt zurück!
     response = supabase.table('project_categories').select('*').order('name').execute()
-    return response.data
+    
+    # Sicherstellen, dass wir eine Liste zurückgeben, auch wenn es leer ist
+    supabase = init_connection()
+    data = response.data
+    if data is None:
+        return []
+    return data
 
 def insert_category(name_text):
     """Fügt eine neue Kategorie hinzu"""
