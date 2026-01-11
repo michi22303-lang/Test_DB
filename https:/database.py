@@ -46,6 +46,24 @@ def delete_all_actuals():
     supabase = init_connection()
     return supabase.table("project_actuals").delete().neq("id", 0).execute()
 
+def get_categories():
+    """Holt alle Einträge aus project_categories"""
+    supabase = init_connection()
+    response = supabase.table('project_categories').select('*').order('name').execute()
+    return response.data
+
+def insert_category(name_text):
+    """Fügt eine neue Kategorie hinzu"""
+    supabase = init_connection()
+    supabase.table('project_categories').insert({"name": name_text}).execute()
+
+def delete_category(cat_id):
+    """Löscht eine Kategorie anhand der ID"""
+    supabase = init_connection()
+    supabase.table('project_categories').delete().eq('id', cat_id).execute()
+
+
+
 @st.cache_data(ttl=600)
 def get_categories():
     """Holt die Kategorien aus der Tabelle 'project_categories'"""
@@ -60,15 +78,3 @@ def get_categories():
         
     return category_list
 
-def get_categories():
-    """Holt alle Einträge aus project_categories"""
-    response = supabase.table('project_categories').select('*').order('name').execute()
-    return response.data
-
-def insert_category(name_text):
-    """Fügt eine neue Kategorie hinzu"""
-    supabase.table('project_categories').insert({"name": name_text}).execute()
-
-def delete_category(cat_id):
-    """Löscht eine Kategorie anhand der ID"""
-    supabase.table('project_categories').delete().eq('id', cat_id).execute()
