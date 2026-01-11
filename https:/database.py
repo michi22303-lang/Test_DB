@@ -46,17 +46,7 @@ def delete_all_actuals():
     supabase = init_connection()
     return supabase.table("project_actuals").delete().neq("id", 0).execute()
 
-def get_categories():
-    supabase = init_connection()
-    # Wir brauchen ALLES (*) -> ID und Name
-    response = supabase.table('project_categories').select('*').order('name').execute()
-    
-    # Wir geben die ROHDATEN zurück (Liste von Dictionaries)
-    data = response.data
-    if data is None: 
-        return []
-    return data
-
+# --- HIER BEGINNT DER KORRIGIERTE ABSCHNITT FÜR DATABASE.PY ---
 
 def insert_category(name_text):
     """Fügt eine neue Kategorie hinzu"""
@@ -74,18 +64,16 @@ def get_actuals():
     response = supabase.table('project_actuals').select('*').execute()
     return response.data
 
-
-@st.cache_data(ttl=600)
+# WICHTIG: Das ist die EINZIGE get_categories Funktion, die wir behalten!
+# Kein @st.cache_data verwenden, damit Änderungen sofort sichtbar sind.
 def get_categories():
-    """Holt die Kategorien aus der Tabelle 'project_categories'"""
+    """Holt alle Kategorien inkl. IDs"""
     supabase = init_connection()
-    # Hier greifen wir auf das 'supabase' Objekt zu, das in dieser Datei lebt
-    response = supabase.table('project_categories').select('name').execute()
-        
-    # Daten extrahieren und flache Liste erstellen
+    # Wir brauchen ALLES (*) -> ID und Name
+    response = supabase.table('project_categories').select('*').order('name').execute()
+    
+    # Wir geben die ROHDATEN zurück (Liste von Dictionaries: [{'id':1, 'name':'IT'}, ...])
     data = response.data
-    category_list = [item['name'] for item in data]
-    category_list.sort()
-        
-    return category_list
-
+    if data is None: 
+        return []
+    return data
