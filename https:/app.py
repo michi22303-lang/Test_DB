@@ -299,8 +299,16 @@ elif selected == "2. Projekt-Planung":
 
             n = st.text_input("Projektname", value=st.session_state.wiz_data.get('project_name',''))
             
-            # Selectbox mit Daten aus DB
-            c = st.selectbox("Kategorie", cat_options)
+            # 1. Wir holen die rohen Daten (Liste von Dictionaries)
+            # z.B. [{'id': 1, 'name': 'Cloud'}, {'id': 2, 'name': 'IT'}]
+            raw_cats = get_categories()
+
+            # 2. Wir bauen daraus eine flache Liste nur mit den Namen
+            # z.B. ['Cloud', 'IT']
+            cat_names = [item['name'] for item in raw_cats]
+            
+            # 3. Diese Liste übergeben wir an die Selectbox
+            c = st.selectbox("Kategorie", cat_names)
             
             # Form Button Logik
             if st.form_submit_button("Weiter ➡️"):
