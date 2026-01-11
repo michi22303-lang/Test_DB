@@ -7,26 +7,28 @@ import numpy as np
 import random
 import time
 
-# Nur für kurzzeitiges Debuggen einfügen:
-if st.sidebar.button("🧹 Cache leeren"):
+# --- DEBUGGING / CACHE ---
+# Dieser Button hilft uns, die alte "falsche" Datenbank-Version aus dem Speicher zu werfen
+if st.sidebar.button("🧹 Cache leeren & Neustart"):
     st.cache_data.clear()
     st.cache_resource.clear()
     st.rerun()
 
-# Imports aus database.py
+# --- DATENBANK IMPORTS ---
+# Hier sind jetzt ALLE Funktionen drin, die Sie brauchen
 from database import (
     insert_bulk_projects, 
     get_projects, 
     insert_bulk_stats,
-    get_stats,
+    get_stats,              # War vorher fehlend
     insert_bulk_actuals,
+    get_actuals,            # War vorher fehlend
     delete_all_projects,
     delete_all_stats,
     delete_all_actuals,
-    get_categories,
-    insert_category,
-    delete_category,
-    get_actuals
+    get_categories,         # Für Tab 4
+    insert_category,        # Für Tab 4
+    delete_category         # Für Tab 4
 )
 
 st.set_page_config(page_title="CIO Cockpit Final", layout="wide", page_icon="🏢")
@@ -439,19 +441,22 @@ elif selected == "Portfolio & Risiko":
             st.plotly_chart(fig, use_container_width=True)
 
 # ------------------------------------------------------------------
-# TAB 8: ADMINISTRATION (Ehemals Daten Manager)
+# ------------------------------------------------------------------
+# TAB: ADMINISTRATION (Ehemals Daten-Manager)
 # ------------------------------------------------------------------
 elif selected == "Administration":
-    st.title("🛠️ Administration")
+    st.title("🛠️ Administration & Einstellungen")
     
-    # Hier wurde "🏷️ Kategorien" als 4. Tab hinzugefügt
+    # Jetzt mit 4 Tabs
     t1, t2, t3, t4 = st.tabs(["🎲 Historie (22-25)", "📅 Ist-Werte 26", "⚠️ Reset", "🏷️ Kategorien"])
     
+    # --- TAB 1: HISTORIE ---
     with t1:
         st.markdown("**Erzeugt Projekte UND Mitarbeiterzahlen (2022-2025)**")
         if st.button("🚀 Historie generieren"):
             delete_all_projects(); delete_all_stats(); delete_all_actuals()
             stats_list, projs_list = [], []
+            # Dummy Daten Generierung
             for y in [2022, 2023, 2024, 2025]:
                 fte = int(500 * (1.05**(y-2022)))
                 rev = 80000000 * (1.07**(y-2022))
@@ -460,82 +465,96 @@ elif selected == "Administration":
                 projs_list.append({"project_name": "Rechenzentrum", "category": "Infrastruktur", "budget_type": "OPEX", "opex_type": "Cloud", "year": y, "cost_planned": 300000, "scenario": "Actual", "status": "Live"})
                 for i in range(4):
                     projs_list.append({"project_name": f"Projekt {y}-{i}", "category": random.choice(["Cloud","Security"]), "budget_type": "CAPEX", "year": y, "cost_planned": random.randint(50000, 200000), "scenario": "Actual", "status": "Closed"})
+            
             insert_bulk_stats(stats_list)
             insert_bulk_projects(projs_list)
-            st.success("Erledigt!"); time.sleep(1); st.rerun()
+            st.success("Historie erfolgreich angelegt!"); time.sleep(1); st.rerun()
             
+    # --- TAB 2: IST-WERTE ---
     with t2:
-        m = st.selectbox("Monat", range(1,13))
-        if st.button("Ist-Kosten buchen"):
-            # Hinweis: Stellen Sie sicher, dass df_proj hier definiert ist oder laden Sie es neu
-            pl = df_proj[(df_proj['year']==2026) & (df_proj['scenario'].isin(['Budget 2026 (Fixed)', 'Planned Project']))]
-            if pl.empty: st.error("Kein Plan 2026.")
+        m = st.selectbox("Monat für Buchung", range(1,13))
+        if st.button("Ist-Kosten simulieren"):
+            # Wir holen uns die Projekte (Hier wird df_proj benötigt - notfalls laden wir es kurz neu)
+            raw_projs = get_projects()
+            if not raw_projs:
+                st.error("Keine Projekte gefunden. Bitte erst Historie generieren.")
             else:
-                a = []
-                for _,r in pl.iterrows(): a.append({"project_id": r['id'], "year": 2026, "month": m, "cost_actual": (r['cost_planned']/12)*random.uniform(0.9,1.1)})
-                insert_bulk_actuals(a); st.success("Gebucht!"); time.sleep(1); st.rerun()
+                df_temp = pd.DataFrame(raw_projs)
+                # Filtern auf 2026er Budget Projekte
+                pl = df_temp[(df_temp['year']==2026) & (df_temp['scenario'].isin(['Budget 2026 (Fixed)', 'Planned Project']))]
+                
+                if pl.empty: 
+                    st.warning("Keine geplanten Projekte für 2026 gefunden.")
+                else:
+                    a = []
+                    for _,r in pl.iterrows(): 
+                        a.append({
+                            "project_id": r['id'], 
+                            "year": 2026, 
+                            "month": m, 
+                            "cost_actual": (r['cost_planned']/12)*random.uniform(0.9,1.1)
+                        })
+                    insert_bulk_actuals(a)
+                    st.success(f"Ist-Kosten für Monat {m} gebucht!"); time.sleep(1); st.rerun()
 
+    # --- TAB 3: RESET ---
     with t3:
-        if st.button("Alles löschen"): 
+        st.warning("Achtung: Dies löscht alle Projekte, Finanzdaten und Ist-Werte!")
+        if st.button("Alles unwiderruflich löschen"): 
             delete_all_projects()
             delete_all_stats()
             delete_all_actuals()
-            st.rerun()
+            st.success("Datenbank geleert."); time.sleep(1); st.rerun()
 
-   # --- TAB 4: KATEGORIEN ---
+    # --- TAB 4: KATEGORIEN (NEU & DEBUGGED) ---
     with t4:
         st.subheader("Projekt-Kategorien verwalten")
         
-        # ... (Formular Code) ...
-        
-        categories = get_categories() 
-        
-        # --- DIAGNOSE START ---
-        st.write("🔍 WAS KOMMT AUS DER DB?", categories)
-        # --- DIAGNOSE ENDE ---
-
-        if categories:
-        
-        # 1. Formular zum Anlegen
-        with st.form("new_category_form", clear_on_submit=True):
-            new_cat_name = st.text_input("Neue Kategorie Name:")
-            submitted = st.form_submit_button("Hinzufügen")
-            if submitted and new_cat_name:
-                insert_category(new_cat_name) 
-                st.success(f"Kategorie '{new_cat_name}' gespeichert.")
-                time.sleep(0.5)
-                st.rerun()
-        
-        st.divider()
-        st.write("**Aktuelle Kategorien:**")
-        
-        # 2. Daten abrufen
-        categories = get_categories() 
-        
-        # DEBUG: Falls Fehler auftreten, zeigen wir kurz die Rohdaten (können Sie später löschen)
-        # st.write("Rohdaten:", categories)
-
-        if categories:
-            # WICHTIG: Falls 'categories' kein Array (Liste) ist, machen wir eine Liste daraus.
-            # Das verhindert, dass Python über die Keys eines einzelnen Objekts iteriert.
-            if not isinstance(categories, list):
-                categories = [categories]
-
-            for cat in categories:
-                # Sicherheitscheck: Ist 'cat' wirklich ein Dictionary?
-                if isinstance(cat, dict):
-                    c1, c2 = st.columns([0.8, 0.2])
-                    
-                    val_name = cat.get('name', 'Unbekannt')
-                    val_id = cat.get('id')
-                    
-                    c1.text(val_name)
-                    
-                    if val_id and c2.button("🗑️", key=f"del_cat_{val_id}"):
-                        delete_category(val_id)
-                        st.rerun()
+        # 1. Eingabeformular
+        with st.form("cat_form", clear_on_submit=True):
+            new_name = st.text_input("Neue Kategorie anlegen")
+            if st.form_submit_button("Speichern"):
+                if new_name:
+                    insert_category(new_name)
+                    st.success(f"Gespeichert: {new_name}")
+                    time.sleep(0.5); st.rerun()
                 else:
-                    # Falls 'cat' ein String ist (z.B. durch falsche Struktur), überspringen oder anzeigen
-                    st.warning(f"Überspringe ungültigen Eintrag: {cat}")
+                    st.error("Bitte einen Namen eingeben.")
+
+        st.divider()
+        st.write("### Vorhandene Kategorien")
+        
+        # Daten laden
+        raw_cats = get_categories()
+
+        # --- DIAGNOSE ANZEIGE (Damit wir sehen was los ist) ---
+        with st.expander("🔍 Diagnose-Daten anzeigen (Klick mich)"):
+            st.write("Daten direkt aus DB:", raw_cats)
+            st.write("Datentyp:", type(raw_cats))
+        # -----------------------------------------------------
+
+        if raw_cats:
+            # Falls nur ein einzelnes Dict kommt (Supabase Eigenheit), Liste draus machen
+            if isinstance(raw_cats, dict):
+                raw_cats = [raw_cats]
+            
+            # Liste durchgehen
+            for cat in raw_cats:
+                # Layout: Name links, Löschen-Button rechts
+                c1, c2 = st.columns([0.85, 0.15])
+                
+                # Fall A: Daten sind korrekt (Dictionary mit id und name)
+                if isinstance(cat, dict):
+                    c1.text(f"🔹 {cat.get('name', 'Ohne Name')}")
+                    cat_id = cat.get('id')
+                    if cat_id:
+                        if c2.button("🗑️", key=f"del_{cat_id}"):
+                            delete_category(cat_id)
+                            st.rerun()
+                
+                # Fall B: Daten sind kaputt (nur Strings wie "Cloud") -> Nur anzeigen, nicht löschbar
+                elif isinstance(cat, str):
+                    c1.warning(f"⚠️ Altes Datenformat: {cat}")
+                    c2.write("-")
         else:
-            st.info("Noch keine Kategorien angelegt.")
+            st.info("Keine Kategorien vorhanden.")
