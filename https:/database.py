@@ -49,7 +49,7 @@ def delete_all_actuals():
 @st.cache_data(ttl=600)
 def get_categories():
     """Holt die Kategorien aus der Tabelle 'project_categories'"""
-
+    supabase = init_connection()
     # Hier greifen wir auf das 'supabase' Objekt zu, das in dieser Datei lebt
     response = supabase.table('project_categories').select('name').execute()
         
