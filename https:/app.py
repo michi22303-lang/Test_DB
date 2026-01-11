@@ -9,6 +9,27 @@ import time
 
 # Imports aus database.py
 from database import insert_bulk_projects, get_projects, insert_bulk_stats, get_stats, delete_all_projects, delete_all_stats, insert_bulk_actuals, get_actuals, delete_all_actuals
+# Diese Funktion holt die Daten und wandelt sie in eine einfache Liste um
+@st.cache_data(ttl=600)  # Cache für 10 Min, spart DB-Requests
+def get_categories_from_supabase():
+    try:
+        # 1. Abfrage an die Tabelle 'project_categories', nur Spalte 'name'
+        response = supabase.table('project_categories').select('name').execute()
+        
+        # 2. Daten extrahieren (response.data ist eine Liste von Dicts)
+        # Wir wandeln [{'name':'Cloud'}, ...] um in ['Cloud', ...]
+        data = response.data
+        category_list = [item['name'] for item in data]
+        
+        # Sortieren ist für User immer nett
+        category_list.sort()
+        
+        return category_list
+        
+    except Exception as e:
+        st.error(f"Fehler beim Laden der Kategorien: {e}")
+        # Fallback, damit die App nicht crasht, falls DB offline ist
+        return ["Cloud", "Workplace", "ERP", "Security", "Infra"]
 
 st.set_page_config(page_title="CIO Cockpit Final", layout="wide", page_icon="🏢")
 
@@ -264,12 +285,23 @@ elif selected == "2. Projekt-Planung":
     st.progress(step/3)
     st.divider()
     
+    # ... (Vorheriger Code) ...
+
     # SCHRITT 1
     if step == 1:
         with st.form("s1"):
             st.subheader("1. Stammdaten")
+            
+            # --- DATENBANK ABFRAGE ---
+            # Hier rufen wir die Funktion auf
+            db_categories = get_categories_from_supabase()
+            # -------------------------
+
             n = st.text_input("Projektname", value=st.session_state.wiz_data.get('project_name',''))
-            c = st.selectbox("Kategorie", ["Cloud", "Workplace", "ERP", "Security", "Infra"])
+            
+            # Die Variable db_categories kommt jetzt in die Selectbox
+            c = st.selectbox("Kategorie", db_categories)
+            
             if st.form_submit_button("Weiter ➡️"):
                 if n: 
                     st.session_state.wiz_data.update({'project_name':n, 'category':c, 'year':2026})
