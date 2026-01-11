@@ -420,11 +420,13 @@ elif selected == "Portfolio & Risiko":
             st.plotly_chart(fig, use_container_width=True)
 
 # ------------------------------------------------------------------
-# TAB 8: DATEN MANAGER
+# TAB 8: ADMINISTRATION (Ehemals Daten Manager)
 # ------------------------------------------------------------------
-elif selected == "Daten-Manager":
-    st.title("💾 Daten Management")
-    t1, t2, t3 = st.tabs(["🎲 Historie (22-25)", "📅 Ist-Werte 26", "⚠️ Reset"])
+elif selected == "Administration":
+    st.title("🛠️ Administration")
+    
+    # Hier wurde "🏷️ Kategorien" als 4. Tab hinzugefügt
+    t1, t2, t3, t4 = st.tabs(["🎲 Historie (22-25)", "📅 Ist-Werte 26", "⚠️ Reset", "🏷️ Kategorien"])
     
     with t1:
         st.markdown("**Erzeugt Projekte UND Mitarbeiterzahlen (2022-2025)**")
@@ -446,6 +448,7 @@ elif selected == "Daten-Manager":
     with t2:
         m = st.selectbox("Monat", range(1,13))
         if st.button("Ist-Kosten buchen"):
+            # Hinweis: Stellen Sie sicher, dass df_proj hier definiert ist oder laden Sie es neu
             pl = df_proj[(df_proj['year']==2026) & (df_proj['scenario'].isin(['Budget 2026 (Fixed)', 'Planned Project']))]
             if pl.empty: st.error("Kein Plan 2026.")
             else:
@@ -454,4 +457,41 @@ elif selected == "Daten-Manager":
                 insert_bulk_actuals(a); st.success("Gebucht!"); time.sleep(1); st.rerun()
 
     with t3:
-        if st.button("Alles löschen"): delete_all_projects(); delete_all_stats(); delete_all_actuals(); st.rerun()
+        if st.button("Alles löschen"): 
+            delete_all_projects()
+            delete_all_stats()
+            delete_all_actuals()
+            st.rerun()
+
+    # --- NEUER TAB: KATEGORIEN ---
+    with t4:
+        st.subheader("Projekt-Kategorien verwalten")
+        
+        # 1. Neue Kategorie anlegen
+        with st.form("new_category_form", clear_on_submit=True):
+            new_cat_name = st.text_input("Neue Kategorie Name:")
+            submitted = st.form_submit_button("Hinzufügen")
+            if submitted and new_cat_name:
+                # Diese Funktion muss in database.py existieren (siehe Schritt 2)
+                insert_category(new_cat_name) 
+                st.success(f"Kategorie '{new_cat_name}' gespeichert.")
+                time.sleep(0.5)
+                st.rerun()
+        
+        st.divider()
+        st.write("**Aktuelle Kategorien:**")
+        
+        # 2. Liste anzeigen & Löschen
+        # Diese Funktion muss in database.py existieren (siehe Schritt 2)
+        categories = get_categories() 
+        
+        if categories:
+            for cat in categories:
+                c1, c2 = st.columns([0.8, 0.2])
+                c1.text(cat['name']) # Annahme: Spalte heißt 'name'
+                # Button zum Löschen (braucht delete_category Funktion)
+                if c2.button("🗑️", key=f"del_cat_{cat['id']}"):
+                    delete_category(cat['id'])
+                    st.rerun()
+        else:
+            st.info("Noch keine Kategorien angelegt.")
