@@ -58,6 +58,11 @@ def delete_category(cat_id):
     supabase = init_connection()
     supabase.table('project_categories').delete().eq('id', cat_id).execute()
 
+def update_category(cat_id, new_name):
+    """Aktualisiert den Namen einer Kategorie"""
+    supabase = init_connection()
+    supabase.table('project_categories').update({"name": new_name}).eq('id', cat_id).execute()
+
 def get_actuals():
     """Holt die Ist-Kosten (Actuals)"""
     supabase = init_connection()
