@@ -19,7 +19,8 @@ from database import (
     delete_all_actuals,
     get_categories,
     insert_category,
-    delete_category
+    delete_category,
+    get_actuals
 )
 
 st.set_page_config(page_title="CIO Cockpit Final", layout="wide", page_icon="🏢")
