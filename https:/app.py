@@ -9,9 +9,10 @@ import time
 
 # Imports aus database.py
 from database import insert_bulk_projects, get_projects, insert_bulk_stats, get_stats, delete_all_projects, delete_all_stats, insert_bulk_actuals, get_actuals, delete_all_actuals
+
 # Diese Funktion holt die Daten und wandelt sie in eine einfache Liste um
 @st.cache_data(ttl=600)  # Cache für 10 Min, spart DB-Requests
-def get_categories_from_supabase():
+def get_categories_from_database():
     try:
         # 1. Abfrage an die Tabelle 'project_categories', nur Spalte 'name'
         response = supabase.table('project_categories').select('name').execute()
